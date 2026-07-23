@@ -23,6 +23,7 @@ from apps.logistics.services.formatting import format_shipment
 from apps.logistics.services.packing import packing_summary
 from apps.logistics.services.shipments import generate_shipment_guide, mark_shipments_sent
 from apps.logistics.tasks import enqueue_generate_shipments, run_format_batch
+from apps.sales.models import SaleState
 from apps.users.permissions import IsModuleRole
 
 
@@ -37,6 +38,7 @@ class ShipmentViewSet(viewsets.ModelViewSet):
     queryset = (
         Shipment.objects.select_related("sale", "geo_city")
         .prefetch_related("sale__items")
+        .filter(sale__state=SaleState.ACTIVE)
         .exclude(status=ShipmentStatus.ENVIADO)
     )
     serializer_class = ShipmentSerializer
@@ -71,8 +73,10 @@ class ShipmentViewSet(viewsets.ModelViewSet):
         return ShipmentSerializer
 
     def get_queryset(self):
-        qs = Shipment.objects.select_related("sale", "geo_city").prefetch_related(
-            "sale__items"
+        qs = (
+            Shipment.objects.select_related("sale", "geo_city")
+            .prefetch_related("sale__items")
+            .filter(sale__state=SaleState.ACTIVE)
         )
         include_sent = self.request.query_params.get("include_sent")
         status_filter = self.request.query_params.get("status")

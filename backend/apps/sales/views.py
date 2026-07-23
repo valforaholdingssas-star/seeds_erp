@@ -156,12 +156,14 @@ class ConsolidatedSaleViewSet(viewsets.ModelViewSet):
         sale = self.get_object()
         ser = WithdrawSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
+        # UI "eliminar": purga venta + envío + factura local
         withdraw_from_consolidated(
             sale,
             reason=ser.validated_data.get("reason") or "",
             actor=request.user,
+            purge=True,
         )
-        return Response(ConsolidatedSaleSerializer(sale).data)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=["post"], url_path="import")
     def import_csv(self, request):

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Eye, Undo2 } from "lucide-react";
+import { Eye, Trash2 } from "lucide-react";
 import { apiClient } from "@/lib/apiClient";
 import { DataTable } from "@/components/data/DataTable";
 import { KanbanBoard, type KanbanItem } from "@/components/kanban/KanbanBoard";
@@ -79,7 +79,11 @@ export function SalesPage() {
     mutationFn: async (id: string) => {
       await apiClient.post(`/sales/${id}/withdraw/`, { reason: "manual" });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["sales"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["shipments"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
   });
 
   const patchSale = useMutation({
@@ -242,11 +246,20 @@ export function SalesPage() {
             </Link>
             <button
               type="button"
-              title="Retirar"
-              onClick={() => withdraw.mutate(row.original.id)}
+              title="Eliminar"
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "¿Eliminar esta venta? También se borrará su envío y factura pendientes.",
+                  )
+                ) {
+                  return;
+                }
+                withdraw.mutate(row.original.id);
+              }}
               className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-line text-terracotta-600 transition-colors hover:bg-terracotta-600/10"
             >
-              <Undo2 strokeWidth={1.5} className="h-3.5 w-3.5" />
+              <Trash2 strokeWidth={1.5} className="h-3.5 w-3.5" />
             </button>
           </div>
         ),
@@ -425,10 +438,17 @@ export function SalesPage() {
                 size="sm"
                 variant="cream"
                 onClick={() => {
+                  if (
+                    !window.confirm(
+                      `¿Eliminar ${selected.length} venta(s)? También se borrarán envíos y facturas pendientes.`,
+                    )
+                  ) {
+                    return;
+                  }
                   selected.forEach((s) => withdraw.mutate(s.id));
                 }}
               >
-                Retirar selección
+                Eliminar selección
               </Button>
             </>
           }

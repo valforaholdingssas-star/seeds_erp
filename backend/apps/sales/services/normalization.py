@@ -269,7 +269,18 @@ def withdraw_from_consolidated(
     reason: str = "",
     state: str = SaleState.WITHDRAWN,
     actor=None,
-) -> ConsolidatedSale:
+    purge: bool = False,
+) -> ConsolidatedSale | None:
+    """
+    Retira una venta del consolidado activo.
+    - purge=False: marca WITHDRAWN y borra envíos/facturas pendientes.
+    - purge=True: elimina la venta y lo relacionado (envío, factura, ítems).
+    """
+    if purge:
+        purge_consolidated_sale(sale, reason=reason, actor=actor)
+        return None
+
+    _cleanup_sale_operations(sale, actor=actor)
     sale.state = state
     sale.withdrawn_reason = reason
     sale.save(update_fields=["state", "withdrawn_reason", "updated_at"])
@@ -281,6 +292,64 @@ def withdraw_from_consolidated(
         metadata={"reason": reason, "state": state},
     )
     return sale
+
+
+def _cleanup_sale_operations(sale: ConsolidatedSale, *, actor=None) -> None:
+    """Quita envíos y facturas no emitidas asociadas a la venta."""
+    from apps.accounting.models import Invoice, InvoiceStatus
+    from apps.logistics.models import Shipment
+
+    for shipment in Shipment.objects.filter(sale=sale):
+        sid = str(shipment.id)
+        shipment.delete()
+        log_audit_event(
+            actor=actor,
+            action="SHIPMENT_REMOVED_ON_WITHDRAW",
+            entity="Shipment",
+            entity_id=sid,
+            metadata={"sale": sale.external_id},
+        )
+
+    pending = Invoice.objects.filter(sale=sale).exclude(
+        status__in=[InvoiceStatus.GENERADA]
+    )
+    for invoice in pending:
+        iid = str(invoice.id)
+        invoice.delete()
+        log_audit_event(
+            actor=actor,
+            action="INVOICE_REMOVED_ON_WITHDRAW",
+            entity="Invoice",
+            entity_id=iid,
+            metadata={"sale": sale.external_id},
+        )
+
+
+def purge_consolidated_sale(
+    sale: ConsolidatedSale,
+    *,
+    reason: str = "",
+    actor=None,
+) -> None:
+    """Hard-delete: venta + envío + factura/reembolsos locales + ítems."""
+    from apps.accounting.models import Invoice, Refund
+    from apps.logistics.models import Shipment
+
+    sale_id = str(sale.id)
+    external_id = sale.external_id
+
+    Refund.objects.filter(sale=sale).delete()
+    Invoice.objects.filter(sale=sale).delete()
+    Shipment.objects.filter(sale=sale).delete()
+    sale.delete()
+
+    log_audit_event(
+        actor=actor,
+        action="SALE_PURGED",
+        entity="ConsolidatedSale",
+        entity_id=sale_id,
+        metadata={"reason": reason, "external_id": external_id},
+    )
 
 
 def apply_status_transition(
