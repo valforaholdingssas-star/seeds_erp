@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+import re
 
 from django.db import transaction
 from django.utils import timezone
@@ -21,6 +22,38 @@ def _cf(values: list[dict] | None, *, field_name: str | None = None, field_code:
             if vals:
                 return str(vals[0].get("value") or "")
     return ""
+
+
+def _cf_any(values: list[dict] | None, *field_names: str) -> str:
+    for name in field_names:
+        found = _cf(values, field_name=name)
+        if found:
+            return found
+    return ""
+
+
+def _parse_money(value) -> Decimal:
+    """Parse Kommo/CO money: '9.500' → 9500, '9500' → 9500, '9,5' → 9.5."""
+    if value is None or value == "":
+        return Decimal("0")
+    if isinstance(value, (int, float, Decimal)):
+        return Decimal(str(value))
+    raw = str(value).strip().replace("$", "").replace(" ", "")
+    if not raw:
+        return Decimal("0")
+    # 1.234.567,89 or 9.500,00
+    if re.fullmatch(r"\d{1,3}(\.\d{3})+(,\d+)?", raw):
+        raw = raw.replace(".", "").replace(",", ".")
+    # 1234,56
+    elif "," in raw and "." not in raw:
+        raw = raw.replace(",", ".")
+    # 9.500 (thousands) vs 9.5 (decimal)
+    elif re.fullmatch(r"\d+\.\d{3}", raw):
+        raw = raw.replace(".", "")
+    try:
+        return Decimal(raw)
+    except InvalidOperation:
+        return Decimal("0")
 
 
 @transaction.atomic
@@ -53,8 +86,17 @@ def upsert_kommo_from_enriched(
         except Exception:
             closed_at = timezone.now()
 
-    total = Decimal(str(lead.get("price") or 0))
-    # Kommo: neto = valor/1.19, transporte = 0 inicial
+    total = _parse_money(lead.get("price") or 0)
+    shipping = _parse_money(
+        _cf_any(
+            cfs,
+            "Recaudado envio",
+            "Recaudado envío",
+            "Recaudado Envio",
+            "TRASPORTE",
+            "Transporte",
+        )
+    )
     qty_d = int(float(_cf(cfs, field_name="# Seeds Dorados") or 0) or 0)
     qty_p = int(float(_cf(cfs, field_name="# Seeds plateados") or 0) or 0)
 
@@ -76,7 +118,7 @@ def upsert_kommo_from_enriched(
             "deal_name": lead.get("name") or "",
             "closed_at": closed_at or timezone.now(),
             "total_value": total,
-            "amount_shipping": Decimal("0"),
+            "amount_shipping": shipping,
             "payment_account": payment_method.name if payment_method else payment_raw,
             "payment_method": payment_method,
             "income_source": "KOMMO",
