@@ -8,9 +8,10 @@ Guía para subir el monorepo a **una sola EC2** con Docker Compose (api + worker
 
 ```
 Internet → :80/:443 (nginx)
-              ├─ /        → frontend (SPA)
-              ├─ /api/    → Django/Gunicorn
-              └─ /admin/  → Django admin
+              ├─ /           → frontend (SPA)
+              ├─ /api/       → Django/Gunicorn
+              ├─ /webhook/   → Django (Kommo-compatible alias)
+              └─ /admin/     → Django admin
          red interna Docker
               ├─ api, worker, beat
               ├─ db (PostGIS)   ← volumen persistente
@@ -20,7 +21,8 @@ Internet → :80/:443 (nginx)
 Webhooks Kommo/Woo apuntan a:
 
 ```text
-http://52.5.54.227/api/v1/webhooks/kommo/lead-status-changed/
+http://52.5.54.227/webhook/947e33e3-6541-42f7-bb11-3c1147808b91
+(Kommo Digital Pipeline only accepts `/webhook/<id>` URLs; the old `/api/v1/webhooks/...` path is also kept for internal/API use.)
 http://52.5.54.227/api/v1/webhooks/woocommerce/order-created/
 ```
 

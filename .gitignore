@@ -19,4 +19,5 @@ frontend/public/fonts/*.ttf
 deploy/certs/*.pem
 deploy/certs/*.key
 deploy/CREDENTIALS.local.txt
+*.pem
 *.sql.gz

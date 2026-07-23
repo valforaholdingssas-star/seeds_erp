@@ -60,7 +60,12 @@ def upsert_kommo_from_enriched(
 
     email = _cf(contact_cfs, field_code="EMAIL")
     phone = _cf(contact_cfs, field_code="PHONE")
-    id_number = _cf(contact_cfs, field_name="Cédula de ciudadanía")
+    # n8n: cédula del contacto; fallback al custom field CC del lead
+    id_number = (
+        _cf(contact_cfs, field_name="Cédula de ciudadanía")
+        or _cf(cfs, field_name="CC")
+        or _cf(cfs, field_name="Cédula de ciudadanía")
+    )
     payment_raw = _cf(cfs, field_name="Medio de pago")
     payment_method = resolve_payment_method(payment_raw, actor=actor)
 
@@ -95,6 +100,9 @@ def upsert_kommo_from_enriched(
             "extra": {
                 "pipeline_id": lead.get("pipeline_id"),
                 "status_id": lead.get("status_id"),
+                "fuente_ingreso": _cf(cfs, field_name="Fuente de ingreso"),
+                "fuente": _cf(cfs, field_name="FUENTE"),
+                "formateador_id": f"SEEDS-{lead_id}",
             },
         },
     )

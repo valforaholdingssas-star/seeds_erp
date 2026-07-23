@@ -62,14 +62,27 @@ def process_raw_event(self, event_id: str):
         if event.source == IntegrationSource.WOOCOMMERCE:
             upsert_ecommerce_from_payload(event.payload, raw_event=event)
         elif event.source == IntegrationSource.KOMMO:
-            # Guard early on webhook status_id (before enrich) when present
+            # Guard early on webhook status_id / pipeline_id (before enrich)
             won_status = str(cfg.get("kommo.won_status_id") or "")
+            won_pipeline = str(cfg.get("kommo.won_pipeline_id") or "")
             raw_status = str(
                 event.payload.get("leads[status][0][status_id]")
                 or event.payload.get("status_id")
                 or (event.payload.get("lead") or {}).get("status_id")
                 or ""
             )
+            raw_pipeline = str(
+                event.payload.get("leads[status][0][pipeline_id]")
+                or event.payload.get("pipeline_id")
+                or (event.payload.get("lead") or {}).get("pipeline_id")
+                or ""
+            )
+            if won_pipeline and raw_pipeline and raw_pipeline != won_pipeline:
+                event.status = RawEventStatus.IGNORED
+                event.error = f"pipeline_id {raw_pipeline} != won {won_pipeline}"
+                event.processed_at = timezone.now()
+                event.save(update_fields=["status", "error", "processed_at", "updated_at"])
+                return
             if won_status and raw_status and raw_status != won_status:
                 event.status = RawEventStatus.IGNORED
                 event.error = f"status_id {raw_status} != won {won_status}"
@@ -88,6 +101,13 @@ def process_raw_event(self, event_id: str):
                     raise
 
             status_id = str(lead.get("status_id") or raw_status or "")
+            pipeline_id = str(lead.get("pipeline_id") or raw_pipeline or "")
+            if won_pipeline and pipeline_id and pipeline_id != won_pipeline:
+                event.status = RawEventStatus.IGNORED
+                event.error = f"pipeline_id {pipeline_id} != won {won_pipeline}"
+                event.processed_at = timezone.now()
+                event.save(update_fields=["status", "error", "processed_at", "updated_at"])
+                return
             if won_status and status_id and status_id != won_status:
                 event.status = RawEventStatus.IGNORED
                 event.error = f"status_id {status_id} != won {won_status}"

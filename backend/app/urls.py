@@ -1,8 +1,9 @@
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from apps.common.views import HealthView
+from apps.sales.views import KommoWebhookView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -12,6 +13,12 @@ urlpatterns = [
         "api/docs/",
         SpectacularSwaggerView.as_view(url_name="schema"),
         name="swagger-ui",
+    ),
+    # Kommo Digital Pipeline UI only accepts /webhook/<id> style URLs (n8n-like).
+    re_path(
+        r"^webhook/(?P<token>[-a-zA-Z0-9]+)/?$",
+        KommoWebhookView.as_view(),
+        name="webhook-kommo-compat",
     ),
     path("api/v1/", include("apps.users.urls")),
     path("api/v1/", include("apps.config.urls")),
