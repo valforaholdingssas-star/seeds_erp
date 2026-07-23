@@ -131,6 +131,8 @@ def generate_shipment_guide(shipment_id, *, actor=None) -> Shipment:
     try:
         body = generate_label(shipment)
         parsed = _extract_envia_result(body)
+        if not parsed["tracking_number"]:
+            raise RuntimeError(f"Envia no devolvió tracking: {body}")
         shipment.tracking_number = parsed["tracking_number"]
         shipment.shipping_cost = parsed["shipping_cost"]
         shipment.label_url = parsed["label_url"]

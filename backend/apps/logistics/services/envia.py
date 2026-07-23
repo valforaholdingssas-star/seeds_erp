@@ -13,6 +13,51 @@ from apps.integrations.rate_limiter import TokenBucketRateLimiter, scrub_headers
 
 logger = logging.getLogger(__name__)
 
+# Envia CO espera códigos de departamento cortos (ej. AN, DC), no ISO de 3 letras.
+_CO_STATE_ENVIA = {
+    "ANT": "AN",
+    "ATL": "AT",
+    "DC": "DC",
+    "BOL": "BL",
+    "BOY": "BY",
+    "CAL": "CL",
+    "CAU": "CA",
+    "CES": "CE",
+    "COR": "CO",
+    "CUN": "CU",
+    "CHO": "CH",
+    "HUI": "HU",
+    "LAG": "LG",
+    "MAG": "MA",
+    "MET": "ME",
+    "NAR": "NA",
+    "NSA": "NS",
+    "QUI": "QD",
+    "RIS": "RI",
+    "SAN": "ST",
+    "SUC": "SU",
+    "TOL": "TO",
+    "VAC": "VC",
+    "ARA": "AR",
+    "CAS": "CS",
+    "PUT": "PU",
+    "AMA": "AM",
+    "GUA": "GN",
+    "VIC": "VD",
+    "VAU": "VP",
+}
+
+
+def _co_state_code(raw: str | None) -> str:
+    code = (raw or "").strip().upper()
+    if not code:
+        return ""
+    if code in _CO_STATE_ENVIA:
+        return _CO_STATE_ENVIA[code]
+    if len(code) == 2:
+        return code
+    return code[:2]
+
 
 def _envia_token() -> str:
     env = cfg.get("envia.environment", "sandbox") or "sandbox"
@@ -31,19 +76,21 @@ def _envia_base_url() -> str:
 def build_generate_payload(shipment) -> dict[str, Any]:
     sale = shipment.sale
     geo = shipment.geo_city
+    # Envia CO: city + postalCode usan código DANE (ej. Bogotá 11001000).
+    origin_dane = "11001000"
+    dest_dane = (geo.municipality_code if geo else "") or ""
     origin = {
         "name": f"{sale.external_id} - Seeds",
         "company": "Seeds",
         "email": "seeds.atencion@gmail.com",
-        "phone_code": "CO",
         "phone": "3507047110",
         "street": "Ak 7 #155C-30",
         "number": "North Point Torre E Oficina 1502",
-        "city": "11001000",
+        "city": origin_dane,
         "state": "DC",
         "country": "CO",
+        "postalCode": origin_dane,
         "identification": "901908375",
-        "type": "origin",
     }
     destination = {
         "name": sale.customer_name or sale.external_id,
@@ -52,9 +99,12 @@ def build_generate_payload(shipment) -> dict[str, Any]:
         "phone": sale.phone or "3000000000",
         "country": "CO",
         "street": shipment.address_formatted or shipment.address_mirror,
-        "number": "",
-        "city": geo.municipality_code if geo else "",
-        "state": shipment.geo_state_code,
+        "number": ".",
+        "city": dest_dane,
+        "state": _co_state_code(
+            shipment.geo_state_code or (geo.department_iso if geo else "")
+        ),
+        "postalCode": dest_dane,
         "identification": sale.id_number or "0",
     }
     return {
@@ -158,13 +208,19 @@ def generate_label(shipment) -> dict[str, Any]:
             response_status=resp.status_code,
             response_body=body if isinstance(body, dict) else {"raw": str(body)},
             latency_ms=latency,
-            success=resp.is_success,
+            success=resp.is_success and not (
+                isinstance(body, dict) and str(body.get("meta") or "").lower() == "error"
+            ),
             error="" if resp.is_success else str(body)[:1000],
             ref_type="Shipment",
             ref_id=str(shipment.id),
         )
         if not resp.is_success:
             raise RuntimeError(f"Envia {resp.status_code}: {body}")
+        if isinstance(body, dict) and str(body.get("meta") or "").lower() == "error":
+            err = body.get("error") or body
+            msg = err.get("message") if isinstance(err, dict) else str(err)
+            raise RuntimeError(f"Envia error: {msg}")
         return body if isinstance(body, dict) else {"raw": body}
     except Exception as exc:
         IntegrationLog.objects.create(
