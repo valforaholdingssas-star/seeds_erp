@@ -100,21 +100,8 @@ def process_raw_event(self, event_id: str):
                 else:
                     raise
 
-            status_id = str(lead.get("status_id") or raw_status or "")
-            pipeline_id = str(lead.get("pipeline_id") or raw_pipeline or "")
-            if won_pipeline and pipeline_id and pipeline_id != won_pipeline:
-                event.status = RawEventStatus.IGNORED
-                event.error = f"pipeline_id {pipeline_id} != won {won_pipeline}"
-                event.processed_at = timezone.now()
-                event.save(update_fields=["status", "error", "processed_at", "updated_at"])
-                return
-            if won_status and status_id and status_id != won_status:
-                event.status = RawEventStatus.IGNORED
-                event.error = f"status_id {status_id} != won {won_status}"
-                event.processed_at = timezone.now()
-                event.save(update_fields=["status", "error", "processed_at", "updated_at"])
-                return
-
+            # Trust the webhook status/pipeline guards above. The lead may have
+            # moved to another column since the event (common on reprocess).
             upsert_kommo_from_enriched(lead=lead, contact=contact, raw_event=event)
         else:
             event.status = RawEventStatus.IGNORED
