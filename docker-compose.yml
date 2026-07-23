@@ -1,0 +1,104 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: seeds_erp
+      POSTGRES_USER: seeds
+      POSTGRES_PASSWORD: seeds
+    ports:
+      - "5432:5432"
+    volumes:
+      - seeds_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U seeds -d seeds_erp"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgres://seeds:seeds@db:5432/seeds_erp
+      REDIS_URL: redis://redis:6379/0
+      DJANGO_SETTINGS_MODULE: app.settings.local
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      gunicorn app.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers 2
+      --reload
+
+  worker:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgres://seeds:seeds@db:5432/seeds_erp
+      REDIS_URL: redis://redis:6379/0
+      DJANGO_SETTINGS_MODULE: app.settings.local
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app worker -l info
+
+  beat:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgres://seeds:seeds@db:5432/seeds_erp
+      REDIS_URL: redis://redis:6379/0
+      DJANGO_SETTINGS_MODULE: app.settings.local
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app beat -l info
+
+  web:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+
+volumes:
+  seeds_pgdata:

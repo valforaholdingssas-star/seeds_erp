@@ -1,0 +1,141 @@
+# Seeds ERP — producción (EC2 / VPS)
+# Uso: docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-seeds_erp}
+      POSTGRES_USER: ${POSTGRES_USER:-seeds}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - seeds_pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-seeds} -d ${POSTGRES_DB:-seeds_erp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - seeds_redis_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    networks:
+      - internal
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      DJANGO_SETTINGS_MODULE: app.settings.production
+      DATABASE_URL: postgres://${POSTGRES_USER:-seeds}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-seeds_erp}
+      REDIS_URL: redis://redis:6379/0
+      SEEDS_BOOTSTRAP_SEEDS: ${SEEDS_BOOTSTRAP_SEEDS:-1}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      gunicorn app.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers ${GUNICORN_WORKERS:-3}
+      --timeout 120
+      --access-logfile -
+      --error-logfile -
+    networks:
+      - internal
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      DJANGO_SETTINGS_MODULE: app.settings.production
+      DATABASE_URL: postgres://${POSTGRES_USER:-seeds}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-seeds_erp}
+      REDIS_URL: redis://redis:6379/0
+      SEEDS_BOOTSTRAP_SEEDS: "0"
+      SEEDS_SKIP_MIGRATE: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    command: celery -A app worker -l info --concurrency=${CELERY_CONCURRENCY:-2}
+    networks:
+      - internal
+
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      DJANGO_SETTINGS_MODULE: app.settings.production
+      DATABASE_URL: postgres://${POSTGRES_USER:-seeds}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-seeds_erp}
+      REDIS_URL: redis://redis:6379/0
+      SEEDS_BOOTSTRAP_SEEDS: "0"
+      SEEDS_SKIP_MIGRATE: "1"
+    depends_on:
+      - worker
+    command: celery -A app beat -l info
+    networks:
+      - internal
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        # Same-origin via nginx → /api (vacío = relative)
+        VITE_API_URL: ${VITE_API_URL:-}
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - internal
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./deploy/certs:/etc/nginx/certs:ro
+    depends_on:
+      - web
+      - api
+    networks:
+      - internal
+
+volumes:
+  seeds_pgdata_prod:
+  seeds_redis_prod:
+
+networks:
+  internal:
+    driver: bridge

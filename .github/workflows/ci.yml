@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: seeds_erp_test
+          POSTGRES_USER: seeds
+          POSTGRES_PASSWORD: seeds
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U seeds -d seeds_erp_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DJANGO_SETTINGS_MODULE: app.settings.local
+      DJANGO_SECRET_KEY: ci-secret
+      DATABASE_URL: postgres://seeds:seeds@localhost:5432/seeds_erp_test
+      REDIS_URL: redis://localhost:6379/0
+      SEEDS_SECRETS_KEY: "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdal-bin libgdal-dev
+          pip install -r requirements.txt
+      - name: Extensions
+        run: |
+          python - <<'PY'
+          import os, psycopg
+          dsn = os.environ["DATABASE_URL"].replace("postgres://", "postgresql://", 1)
+          with psycopg.connect(dsn, autocommit=True) as conn:
+              with conn.cursor() as cur:
+                  cur.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+                  cur.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+          PY
+      - name: Migrate + test
+        run: |
+          python manage.py migrate --noinput
+          pytest -q --tb=line
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx tsc -b --pretty false
+      - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: seeds_erp
+          POSTGRES_USER: seeds
+          POSTGRES_PASSWORD: seeds
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U seeds -d seeds_erp"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    env:
+      DJANGO_SETTINGS_MODULE: app.settings.local
+      DJANGO_SECRET_KEY: ci-secret
+      DATABASE_URL: postgres://seeds:seeds@localhost:5432/seeds_erp
+      REDIS_URL: redis://localhost:6379/0
+      SEEDS_SECRETS_KEY: "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
+      VITE_API_URL: http://127.0.0.1:8000
+      DJANGO_SUPERUSER_EMAIL: admin@seeds.co
+      DJANGO_SUPERUSER_PASSWORD: admin1234
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Backend deps + migrate + seed
+        working-directory: backend
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdal-bin libgdal-dev
+          pip install -r requirements.txt
+          python - <<'PY'
+          import os, psycopg
+          dsn = os.environ["DATABASE_URL"].replace("postgres://", "postgresql://", 1)
+          with psycopg.connect(dsn, autocommit=True) as conn:
+              with conn.cursor() as cur:
+                  cur.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+                  cur.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+          PY
+          python manage.py migrate --noinput
+          python manage.py bootstrap_admin
+      - name: Start API
+        working-directory: backend
+        run: |
+          gunicorn app.wsgi:application --bind 127.0.0.1:8000 --workers 1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/api/health/ >/dev/null && break
+            sleep 1
+          done
+      - name: Frontend + Playwright
+        working-directory: frontend
+        env:
+          VITE_API_URL: http://127.0.0.1:8000
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run test:e2e
