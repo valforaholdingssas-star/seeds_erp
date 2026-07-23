@@ -45,6 +45,7 @@ type SaleDetail = {
     id: string;
     status: string;
     tracking_number: string;
+    label_url: string;
     shipping_cost: string | null;
     warning: boolean;
     do_not_ship: boolean;
@@ -246,6 +247,19 @@ export function SaleDetailPage() {
                     : "—"
                 }
               />
+              {s.shipment.label_url ? (
+                <div>
+                  <p className="label-caps text-text-muted">Etiqueta</p>
+                  <a
+                    href={s.shipment.label_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-block text-sm text-sage-600 underline underline-offset-2 hover:text-green-900"
+                  >
+                    Abrir PDF
+                  </a>
+                </div>
+              ) : null}
             </div>
           ) : (
             <p className="text-sm text-text-muted">

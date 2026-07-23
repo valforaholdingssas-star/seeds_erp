@@ -197,3 +197,68 @@ def mark_shipments_sent(ids: list, *, actor=None) -> list[Shipment]:
             pass
         updated.append(shipment)
     return updated
+
+
+@transaction.atomic
+def mark_shipment_cancelled_local(shipment_id, *, actor=None) -> Shipment:
+    """Mark guide cancelled in Seeds after manual cancel in Envia (no Envia API call)."""
+    shipment = Shipment.objects.select_for_update().select_related("sale").get(id=shipment_id)
+    if shipment.status == ShipmentStatus.CANCELADA:
+        return shipment
+    if shipment.status == ShipmentStatus.ENVIADO:
+        raise ValueError("No se puede cancelar un envío ya marcado como enviado.")
+    if not shipment.tracking_number and shipment.status not in {
+        ShipmentStatus.LISTO_PARA_ENVIAR,
+        ShipmentStatus.GUIA_FALLIDA,
+    }:
+        raise ValueError("No hay guía para cancelar.")
+
+    prev_tracking = shipment.tracking_number
+    shipment.status = ShipmentStatus.CANCELADA
+    note = "Cancelada manualmente en Envia."
+    if prev_tracking:
+        note = f"{note} Guía previa: {prev_tracking}."
+    shipment.last_error = note
+    shipment.save(update_fields=["status", "last_error", "updated_at"])
+    log_audit_event(
+        actor=actor,
+        action="SHIPMENT_CANCELLED_LOCAL",
+        entity="Shipment",
+        entity_id=str(shipment.id),
+        metadata={"tracking": prev_tracking},
+    )
+    return shipment
+
+
+@transaction.atomic
+def reopen_shipment_for_regenerate(shipment_id, *, actor=None) -> Shipment:
+    """Clear Envia guide fields so a new label can be generated after local cancel."""
+    shipment = Shipment.objects.select_for_update().select_related("sale").get(id=shipment_id)
+    if shipment.status != ShipmentStatus.CANCELADA:
+        raise ValueError("Solo se reabre desde cancelada.")
+
+    prev_tracking = shipment.tracking_number
+    shipment.tracking_number = ""
+    shipment.label_url = ""
+    shipment.envia_shipment_id = ""
+    shipment.shipping_cost = None
+    shipment.generated_city = ""
+    shipment.generated_state = ""
+    shipment.generated_address = ""
+    shipment.warning = False
+    shipment.warning_detail = {}
+    shipment.status = ShipmentStatus.POR_GENERAR
+    shipment.last_error = (
+        f"Reabierta tras cancelación. Guía anterior: {prev_tracking}."
+        if prev_tracking
+        else "Reabierta tras cancelación."
+    )
+    shipment.save()
+    log_audit_event(
+        actor=actor,
+        action="SHIPMENT_REOPENED",
+        entity="Shipment",
+        entity_id=str(shipment.id),
+        metadata={"previous_tracking": prev_tracking},
+    )
+    return shipment

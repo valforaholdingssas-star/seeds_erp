@@ -14,6 +14,7 @@ class ShipmentStatus(models.TextChoices):
     LISTO_PARA_ENVIAR = "LISTO_PARA_ENVIAR", "Listo para enviar"
     ENVIADO = "ENVIADO", "Enviado"
     REVISAR = "REVISAR", "Revisar / no enviar"
+    CANCELADA = "CANCELADA", "Cancelada"
 
 
 class BatchJobType(models.TextChoices):

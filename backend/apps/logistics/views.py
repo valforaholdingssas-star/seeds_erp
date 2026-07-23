@@ -21,7 +21,12 @@ from apps.logistics.serializers import (
 )
 from apps.logistics.services.formatting import format_shipment
 from apps.logistics.services.packing import packing_summary
-from apps.logistics.services.shipments import generate_shipment_guide, mark_shipments_sent
+from apps.logistics.services.shipments import (
+    generate_shipment_guide,
+    mark_shipment_cancelled_local,
+    mark_shipments_sent,
+    reopen_shipment_for_regenerate,
+)
 from apps.logistics.tasks import enqueue_generate_shipments, run_format_batch
 from apps.sales.models import SaleState
 from apps.users.permissions import IsModuleRole
@@ -158,6 +163,24 @@ class ShipmentViewSet(viewsets.ModelViewSet):
         if shipment.status not in {ShipmentStatus.GUIA_FALLIDA, ShipmentStatus.POR_GENERAR}:
             return Response({"detail": "Solo se reintenta desde fallida/por generar."}, status=400)
         shipment = generate_shipment_guide(shipment.id, actor=request.user)
+        return Response(ShipmentSerializer(shipment).data)
+
+    @action(detail=True, methods=["post"], url_path="cancel-local")
+    def cancel_local(self, request, pk=None):
+        """Mark cancelled in Seeds after the user cancels the guide manually in Envia."""
+        try:
+            shipment = mark_shipment_cancelled_local(self.get_object().id, actor=request.user)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(ShipmentSerializer(shipment).data)
+
+    @action(detail=True, methods=["post"], url_path="reopen")
+    def reopen(self, request, pk=None):
+        """Clear cancelled guide fields so a new Envia label can be generated."""
+        try:
+            shipment = reopen_shipment_for_regenerate(self.get_object().id, actor=request.user)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
         return Response(ShipmentSerializer(shipment).data)
 
     @action(detail=False, methods=["post"], url_path="bulk-update")

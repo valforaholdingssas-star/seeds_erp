@@ -104,6 +104,7 @@ class ConsolidatedSaleSerializer(serializers.ModelSerializer):
             "id": str(s.id),
             "status": s.status,
             "tracking_number": s.tracking_number,
+            "label_url": s.label_url,
             "shipping_cost": str(s.shipping_cost) if s.shipping_cost is not None else None,
             "warning": s.warning,
             "do_not_ship": s.do_not_ship,

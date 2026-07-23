@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { Ban, FileText, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
 import { apiClient } from "@/lib/apiClient";
 import { DataTable } from "@/components/data/DataTable";
 import { KanbanBoard, type KanbanItem } from "@/components/kanban/KanbanBoard";
@@ -18,6 +18,7 @@ const SHIP_STATUSES = [
   "LISTO_PARA_ENVIAR",
   "GUIA_FALLIDA",
   "REVISAR",
+  "CANCELADA",
   "ENVIADO",
 ] as const;
 
@@ -36,6 +37,7 @@ type Shipment = {
   generated_address: string;
   status: string;
   tracking_number: string;
+  label_url: string;
   shipping_cost: string | null;
   warning: boolean;
   warning_detail: string;
@@ -59,6 +61,7 @@ const statusVariant: Record<string, "sage" | "terracotta" | "wine" | "dark"> = {
   LISTO_PARA_ENVIAR: "sage",
   GUIA_FALLIDA: "wine",
   REVISAR: "terracotta",
+  CANCELADA: "wine",
   ENVIADO: "sage",
 };
 
@@ -145,6 +148,20 @@ export function ShipmentsPage() {
   const retry = useMutation({
     mutationFn: async (id: string) => {
       await apiClient.post(`/logistics/shipments/${id}/retry/`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["shipments"] }),
+  });
+
+  const cancelLocal = useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.post(`/logistics/shipments/${id}/cancel-local/`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["shipments"] }),
+  });
+
+  const reopen = useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.post(`/logistics/shipments/${id}/reopen/`);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["shipments"] }),
   });
@@ -286,31 +303,87 @@ export function ShipmentsPage() {
       {
         id: "actions",
         header: "",
-        cell: ({ row }) => (
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              title="Formatear con IA"
-              onClick={() => formatOne.mutate(row.original.id)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-line text-green-900 hover:bg-cream-100"
-            >
-              <Sparkles strokeWidth={1.5} className="h-3.5 w-3.5" />
-            </button>
-            {row.original.status === "GUIA_FALLIDA" ? (
+        cell: ({ row }) => {
+          const s = row.original;
+          const canCancel =
+            Boolean(s.tracking_number) &&
+            s.status !== "CANCELADA" &&
+            s.status !== "ENVIADO";
+          return (
+            <div className="flex items-center gap-1.5">
+              {s.label_url ? (
+                <a
+                  href={s.label_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Abrir PDF de guía"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-line text-green-900 hover:bg-cream-100"
+                >
+                  <FileText strokeWidth={1.5} className="h-3.5 w-3.5" />
+                </a>
+              ) : null}
               <button
                 type="button"
-                title="Reintentar"
-                onClick={() => retry.mutate(row.original.id)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-wine-900/30 text-wine-900 hover:bg-wine-900/10"
+                title="Formatear con IA"
+                onClick={() => formatOne.mutate(s.id)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-line text-green-900 hover:bg-cream-100"
               >
-                <RefreshCw strokeWidth={1.5} className="h-3.5 w-3.5" />
+                <Sparkles strokeWidth={1.5} className="h-3.5 w-3.5" />
               </button>
-            ) : null}
-          </div>
-        ),
+              {s.status === "GUIA_FALLIDA" ? (
+                <button
+                  type="button"
+                  title="Reintentar"
+                  onClick={() => retry.mutate(s.id)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-wine-900/30 text-wine-900 hover:bg-wine-900/10"
+                >
+                  <RefreshCw strokeWidth={1.5} className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+              {canCancel ? (
+                <button
+                  type="button"
+                  title="Marcar cancelada (ya cancelaste en Envia)"
+                  disabled={cancelLocal.isPending}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "¿Marcar esta guía como cancelada en Seeds?\n\nEsto no cancela en Envia: úsalo solo después de cancelar manualmente allí.",
+                      )
+                    ) {
+                      cancelLocal.mutate(s.id);
+                    }
+                  }}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-wine-900/30 text-wine-900 hover:bg-wine-900/10 disabled:opacity-50"
+                >
+                  <Ban strokeWidth={1.5} className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+              {s.status === "CANCELADA" ? (
+                <button
+                  type="button"
+                  title="Reabrir para generar nueva guía"
+                  disabled={reopen.isPending}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "¿Reabrir este envío?\n\nSe limpia la guía anterior y vuelve a Por generar.",
+                      )
+                    ) {
+                      reopen.mutate(s.id);
+                    }
+                  }}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-line text-green-900 hover:bg-cream-100 disabled:opacity-50"
+                >
+                  <RotateCcw strokeWidth={1.5} className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+            </div>
+          );
+        },
       },
     ],
-    [formatOne, retry, patchMirror],
+    [formatOne, retry, cancelLocal, reopen, patchMirror],
   );
 
   const selectedIds = selected.map((s) => s.id);
