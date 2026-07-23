@@ -6,7 +6,7 @@ import {
   type RowSelectionState,
   type Table,
 } from "@tanstack/react-table";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Download, Filter, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -48,6 +48,7 @@ function SelectAllHeader<T>({ table }: { table: Table<T> }) {
       }}
       onChange={table.getToggleAllRowsSelectedHandler()}
       className="h-4 w-4 accent-green-900"
+      onClick={(e) => e.stopPropagation()}
     />
   );
 }
@@ -70,18 +71,29 @@ export function DataTable<T extends { id: string }>({
   const [draftFilters, setDraftFilters] = useState<Record<string, string>>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const lastEmittedIds = useRef<string>("");
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
 
   const activeFilterCount = useMemo(
     () => Object.values(filters).filter((v) => v.trim()).length,
     [filters],
   );
 
+  // Parents often pass searchableKeys inline; stabilize by value to avoid
+  // filtered→onSelectionChange→re-render loops that freeze the table.
+  const searchableKeySig = searchableKeys.map(String).join("\0");
+  const stableSearchKeys = useMemo(
+    () => searchableKeySig.split("\0").filter(Boolean) as (keyof T)[],
+    [searchableKeySig],
+  );
+
   const filtered = useMemo(() => {
     let rows = data;
-    if (query.trim() && searchableKeys.length) {
+    if (query.trim() && stableSearchKeys.length) {
       const q = query.toLowerCase();
       rows = rows.filter((row) =>
-        searchableKeys.some((key) =>
+        stableSearchKeys.some((key) =>
           String(row[key] ?? "")
             .toLowerCase()
             .includes(q),
@@ -102,7 +114,7 @@ export function DataTable<T extends { id: string }>({
       });
     }
     return rows;
-  }, [data, query, searchableKeys, filters]);
+  }, [data, query, stableSearchKeys, filters]);
 
   // Drop selection for rows no longer visible after filter/search.
   useEffect(() => {
@@ -143,11 +155,15 @@ export function DataTable<T extends { id: string }>({
   });
 
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);
+  const selectedIdsSig = selected.map((r) => r.id).sort().join(",");
 
   useEffect(() => {
-    onSelectionChange?.(selected);
+    if (selectedIdsSig === lastEmittedIds.current) return;
+    lastEmittedIds.current = selectedIdsSig;
+    onSelectionChangeRef.current?.(selected);
+    // selected is derived from rowSelection; only emit when ids actually change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rowSelection, filtered]);
+  }, [selectedIdsSig, rowSelection]);
 
   function openFilters() {
     setDraftFilters(filters);
