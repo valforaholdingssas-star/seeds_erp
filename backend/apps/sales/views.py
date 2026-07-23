@@ -299,7 +299,8 @@ class KommoWebhookView(APIView):
     permission_classes = [AllowAny]
     authentication_classes: list = []
 
-    def post(self, request):
+    def post(self, request, token=None):
+        # token = path id for /webhook/<id> (Kommo UI); ignored by handler
         # Kommo sends form-encoded; DRF parses to QueryDict
         data = request.data
         if hasattr(data, "dict"):
