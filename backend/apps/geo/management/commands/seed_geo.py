@@ -1,62 +1,129 @@
 from __future__ import annotations
 
-from django.contrib.gis.geos import Point
+import csv
+from pathlib import Path
+
 from django.core.management.base import BaseCommand
 
 from apps.geo.models import GeoCatalog
 from apps.geo.services import normalize_text
 
-# Seed mínimo de municipios frecuentes (DANE). Ampliar con CSV oficial después.
-SEED_MUNICIPALITIES = [
-    ("Bogotá", "11001000", "Bogotá D.C.", "DC", -74.0721, 4.7110),
-    ("Medellín", "05001000", "Antioquia", "ANT", -75.5636, 6.2476),
-    ("Cali", "76001000", "Valle del Cauca", "VAC", -76.5225, 3.4516),
-    ("Barranquilla", "08001000", "Atlántico", "ATL", -74.7813, 10.9685),
-    ("Cartagena", "13001000", "Bolívar", "BOL", -75.5144, 10.3910),
-    ("Bucaramanga", "68001000", "Santander", "SAN", -73.1198, 7.1193),
-    ("Pereira", "66001000", "Risaralda", "RIS", -75.6961, 4.8133),
-    ("Manizales", "17001000", "Caldas", "CAL", -75.5138, 5.0703),
-    ("Santa Marta", "47001000", "Magdalena", "MAG", -74.1990, 11.2408),
-    ("Cúcuta", "54001000", "Norte de Santander", "NSA", -72.5078, 7.8891),
-    ("Ibagué", "73001000", "Tolima", "TOL", -75.2322, 4.4389),
-    ("Villavicencio", "50001000", "Meta", "MET", -73.6266, 4.1420),
-    ("Pasto", "52001000", "Nariño", "NAR", -77.2811, 1.2136),
-    ("Montería", "23001000", "Córdoba", "COR", -75.8814, 8.74798),
-    ("Neiva", "41001000", "Huila", "HUI", -75.2819, 2.9273),
-    ("Armenia", "63001000", "Quindío", "QUI", -75.6811, 4.5339),
-    ("Popayán", "19001000", "Cauca", "CAU", -76.6147, 2.4448),
-    ("Valledupar", "20001000", "Cesar", "CES", -73.2591, 10.4631),
-    ("Sincelejo", "70001000", "Sucre", "SUC", -75.3978, 9.3047),
-    ("Tunja", "15001000", "Boyacá", "BOY", -73.3678, 5.5353),
-    ("Envigado", "05266000", "Antioquia", "ANT", -75.5800, 6.1699),
-    ("Itagüí", "05360000", "Antioquia", "ANT", -75.5991, 6.1846),
-    ("Soacha", "25754000", "Cundinamarca", "CUN", -74.2144, 4.5794),
-    ("Chía", "25175000", "Cundinamarca", "CUN", -74.0586, 4.8616),
-    ("Zipaquirá", "25899000", "Cundinamarca", "CUN", -74.0058, 5.0221),
-]
+DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "divipola_municipios.csv"
+
+# ISO 3166-2:CO (sin prefijo CO-)
+DEPT_ISO: dict[str, str] = {
+    "Amazonas": "AMA",
+    "Antioquia": "ANT",
+    "Arauca": "ARA",
+    "Archipiélago de San Andrés": "SAP",
+    "Atlántico": "ATL",
+    "Bogotá D.C.": "DC",
+    "Bolívar": "BOL",
+    "Boyacá": "BOY",
+    "Caldas": "CAL",
+    "Caquetá": "CAQ",
+    "Casanare": "CAS",
+    "Cauca": "CAU",
+    "Cesar": "CES",
+    "Chocó": "CHO",
+    "Córdoba": "COR",
+    "Cundinamarca": "CUN",
+    "Guainía": "GUA",
+    "Guaviare": "GUV",
+    "Huila": "HUI",
+    "La Guajira": "LAG",
+    "Magdalena": "MAG",
+    "Meta": "MET",
+    "Nariño": "NAR",
+    "Norte de Santander": "NSA",
+    "Putumayo": "PUT",
+    "Quindío": "QUI",
+    "Risaralda": "RIS",
+    "Santander": "SAN",
+    "Sucre": "SUC",
+    "Tolima": "TOL",
+    "Valle del Cauca": "VAC",
+    "Vaupés": "VAU",
+    "Vichada": "VID",
+}
+
+
+def dane_city_code(raw: str) -> str:
+    """DIVIPOLA municipio (5) → código cabecera Envia/DANE (8) con sufijo 000."""
+    digits = "".join(ch for ch in str(raw).strip() if ch.isdigit()).zfill(5)
+    if len(digits) >= 8:
+        return digits[:8]
+    return f"{digits}000"
 
 
 class Command(BaseCommand):
-    help = "Carga el catálogo geográfico mínimo (municipios DANE frecuentes)."
+    help = "Carga el catálogo DIVIPOLA completo (municipios DANE) desde CSV."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--purge-missing",
+            action="store_true",
+            help="Elimina municipios del catálogo que no están en el CSV.",
+        )
 
     def handle(self, *args, **options):
+        if not DATA_PATH.exists():
+            self.stderr.write(self.style.ERROR(f"No existe {DATA_PATH}"))
+            return
+
         created = 0
         updated = 0
-        for name, code, dept, iso, lng, lat in SEED_MUNICIPALITIES:
-            obj, was_created = GeoCatalog.objects.update_or_create(
-                municipality_code=code,
-                defaults={
-                    "municipality": name,
-                    "department": dept,
-                    "department_iso": iso,
-                    "search": normalize_text(name),
-                    "point": Point(lng, lat, srid=4326),
-                },
-            )
-            if was_created:
-                created += 1
-            else:
-                updated += 1
+        skipped = 0
+        seen_codes: set[str] = set()
+        unknown_depts: set[str] = set()
+
+        with DATA_PATH.open(encoding="utf-8") as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                dept = (row.get("DEPARTAMENTO") or "").strip()
+                name = (row.get("MUNICIPIO") or "").strip()
+                raw_code = (row.get("CODIGO_MUNICIPIO") or "").strip()
+                if not dept or not name or not raw_code:
+                    skipped += 1
+                    continue
+                iso = DEPT_ISO.get(dept)
+                if not iso:
+                    unknown_depts.add(dept)
+                    skipped += 1
+                    continue
+                code = dane_city_code(raw_code)
+                seen_codes.add(code)
+                # Bogotá: nombre canónico corto para matching de pedidos
+                display = "Bogotá" if code.startswith("11001") else name
+                obj, was_created = GeoCatalog.objects.update_or_create(
+                    municipality_code=code,
+                    defaults={
+                        "municipality": display,
+                        "department": dept,
+                        "department_iso": iso,
+                        "search": normalize_text(display),
+                    },
+                )
+                if was_created:
+                    created += 1
+                else:
+                    updated += 1
+
+        deleted = 0
+        if options["purge_missing"] and seen_codes:
+            qs = GeoCatalog.objects.exclude(municipality_code__in=seen_codes)
+            deleted = qs.count()
+            qs.delete()
+
         self.stdout.write(
-            self.style.SUCCESS(f"GeoCatalog: {created} creados, {updated} actualizados.")
+            self.style.SUCCESS(
+                f"GeoCatalog: {created} creados, {updated} actualizados"
+                + (f", {deleted} eliminados" if deleted else "")
+                + (f", {skipped} omitidos" if skipped else "")
+                + f". Total CSV: {len(seen_codes)}."
+            )
         )
+        if unknown_depts:
+            self.stderr.write(
+                self.style.WARNING(f"Departamentos sin ISO: {sorted(unknown_depts)}")
+            )
