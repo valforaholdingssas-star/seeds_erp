@@ -5,6 +5,7 @@ import { useAuthStore } from "@/features/auth/store";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 export function LoginPage() {
   const access = useAuthStore((s) => s.access);
@@ -47,13 +48,11 @@ export function LoginPage() {
       />
       <div className="relative z-10 w-full max-w-md animate-[fade-up_520ms_var(--ease-soft)]">
         <div className="mb-8 text-center text-text-on-dark">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-line-dark font-serif text-2xl">
-            ee
-          </div>
-          <h1 className="font-serif text-5xl tracking-tight">
-            Se<span className="spark">✦</span>eds
-          </h1>
-          <p className="mt-3 text-text-on-dark-muted">Entra para acompañar la operación del día.</p>
+          <BrandLogo size="login" className="mb-5" />
+          <p className="label-caps text-text-on-dark-muted">ERP</p>
+          <p className="mt-3 text-text-on-dark-muted">
+            Entra para acompañar la operación del día.
+          </p>
         </div>
 
         <form

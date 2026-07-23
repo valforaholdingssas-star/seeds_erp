@@ -29,6 +29,7 @@ import { useAuthStore, type UserRole } from "@/features/auth/store";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { BatchConsole } from "@/components/batch/BatchConsole";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 type NavItem = {
   to: string;
@@ -410,17 +411,10 @@ export function AppShell() {
   const aside = (
     <aside className="seeds-panel-dark flex h-full w-[260px] shrink-0 flex-col text-text-on-dark">
       <div className="relative z-10 border-b border-line-dark px-6 py-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full border border-line-dark font-serif text-xl tracking-tight">
-            ee
-          </div>
-          <div>
-            <p className="font-serif text-2xl leading-none tracking-tight">
-              Se<span className="spark">✦</span>eds
-            </p>
-            <p className="label-caps mt-1 text-text-on-dark-muted">ERP</p>
-          </div>
-        </div>
+        <NavLink to="/" className="block" end onClick={() => setOpen(false)}>
+          <BrandLogo size="sidebar" />
+          <p className="label-caps mt-2 text-text-on-dark-muted">ERP</p>
+        </NavLink>
       </div>
 
       <SidebarNav onNavigate={() => setOpen(false)} />
@@ -476,7 +470,7 @@ export function AppShell() {
               {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             </button>
             <div className="flex items-center gap-2 text-text-muted">
-              <Leaf strokeWidth={1.5} className="h-4 w-4 text-sage-500" />
+              <BrandLogo size="sm" className="opacity-90 brightness-0 lg:hidden" />
               <span className="label-caps">Entorno · sandbox</span>
             </div>
           </div>

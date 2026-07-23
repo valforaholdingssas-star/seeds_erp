@@ -4,6 +4,7 @@ import { apiClient } from "@/lib/apiClient";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 export function PasswordResetPage() {
   const [email, setEmail] = useState("");
@@ -64,6 +65,7 @@ export function PasswordResetPage() {
       />
       <div className="relative z-10 w-full max-w-md animate-[fade-up_520ms_var(--ease-soft)]">
         <div className="mb-8 text-center text-text-on-dark">
+          <BrandLogo size="login" className="mb-5" />
           <h1 className="font-serif text-4xl tracking-tight">Recuperar acceso</h1>
           <p className="mt-3 text-text-on-dark-muted">
             Un gesto pequeño para volver a entrar.
