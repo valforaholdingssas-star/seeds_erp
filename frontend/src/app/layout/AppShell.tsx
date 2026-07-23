@@ -459,24 +459,16 @@ export function AppShell() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-cream-100/85 px-4 py-3 backdrop-blur-md sm:px-8">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              className="rounded-[12px] border border-line p-2 text-green-900 lg:hidden"
-              onClick={() => setOpen(true)}
-              aria-label="Abrir menú"
-            >
-              {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-            </button>
-            <div className="flex items-center gap-2 text-text-muted">
-              <BrandLogo size="sm" className="opacity-90 brightness-0 lg:hidden" />
-              <span className="label-caps">Entorno · sandbox</span>
-            </div>
-          </div>
-          <p className="hidden text-sm text-text-soft sm:block">
-            Tu cuerpo, tu jardín <span className="spark">✦</span> operación calmada
-          </p>
+        <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-cream-100/85 px-4 py-2.5 backdrop-blur-md lg:hidden">
+          <button
+            type="button"
+            className="rounded-[12px] border border-line p-2 text-green-900"
+            onClick={() => setOpen(true)}
+            aria-label="Abrir menú"
+          >
+            {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          </button>
+          <BrandLogo size="sm" className="opacity-90 brightness-0" />
         </div>
         <main className="animate-[fade-up_520ms_var(--ease-soft)] flex-1 px-4 py-4 sm:px-8 sm:py-5">
           <Outlet />
