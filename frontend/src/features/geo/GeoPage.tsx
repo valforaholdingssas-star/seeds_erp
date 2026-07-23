@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type GeoRow = {
   id: string;
@@ -57,16 +58,8 @@ export function GeoPage() {
   );
 
   return (
-    <div className="space-y-8">
-      <header>
-        <p className="label-caps text-text-muted">Geografía</p>
-        <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">
-          Catálogo DANE
-        </h1>
-        <p className="mt-2 max-w-xl text-text-muted">
-          Resolución exacta → difusa (pg_trgm). El formateo con IA llega en logística.
-        </p>
-      </header>
+    <div className="space-y-3">
+      <PageHeader eyebrow="Geografía" title="Catálogo DANE" />
 
       <Card>
         <div className="flex flex-wrap items-end gap-3">

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { KIT_TYPES, kitTypeLabel } from "@/lib/kitTypes";
 
 type Product = {
@@ -193,36 +194,31 @@ export function ProductsPage() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-[32px] border border-line bg-warm-white/90 p-5 shadow-[var(--shadow-1)] sm:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="label-caps text-text-muted">Inventario / Productos</p>
-            <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">Productos</h1>
-            <p className="mt-2 max-w-xl text-sm text-text-muted">
-              Alta y edición en ERP. El stock baja al marcar despacho como enviado.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+    <div className="space-y-3">
+      <PageHeader
+        eyebrow="Inventario"
+        title="Productos"
+        actions={
+          <>
             <Link
               to="/inventory/materials"
-              className="inline-flex min-h-9 items-center rounded-[999px] border border-line px-4 label-caps text-green-900 hover:bg-cream-100"
+              className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps text-green-900 hover:bg-cream-100"
             >
               Materiales
             </Link>
             <Link
               to="/inventory/kardex"
-              className="inline-flex min-h-9 items-center rounded-[999px] border border-line px-4 label-caps text-green-900 hover:bg-cream-100"
+              className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps text-green-900 hover:bg-cream-100"
             >
               Kardex
             </Link>
-            <Button type="button" size="sm" onClick={openCreate}>
+            <Button type="button" size="xs" onClick={openCreate}>
               <Plus strokeWidth={1.5} className="h-3.5 w-3.5" />
               Nuevo
             </Button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {(alerts.data?.length || 0) > 0 ? (
         <Alert variant="caution">

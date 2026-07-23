@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { InlineText } from "@/components/ui/InlineText";
 import { MockModeBanner } from "@/components/ui/MockModeBanner";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { formatCOP } from "@/lib/utils";
 import { useBatchConsole } from "@/features/batch/batchStore";
 
@@ -402,21 +403,15 @@ export function ShipmentsPage() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-[32px] border border-line bg-warm-white/90 p-5 shadow-[var(--shadow-1)] sm:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <p className="label-caps text-text-muted">Logística / Envíos</p>
-            <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">Envíos</h1>
-            <p className="mt-2 max-w-xl text-sm text-text-muted">
-              Clic en dirección o ciudad para editar el espejo. El contraste Envia aparece en
-              verde o terracota si hay warning.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-3">
+      <PageHeader
+        eyebrow="Logística"
+        title="Envíos"
+        actions={
+          <>
             <Button
               type="button"
-              size="sm"
+              size="xs"
               variant={view === "tabla" ? "primary-dark" : "outline"}
               onClick={() => setView("tabla")}
             >
@@ -424,7 +419,7 @@ export function ShipmentsPage() {
             </Button>
             <Button
               type="button"
-              size="sm"
+              size="xs"
               variant={view === "kanban" ? "primary-dark" : "outline"}
               onClick={() => setView("kanban")}
             >
@@ -432,7 +427,7 @@ export function ShipmentsPage() {
             </Button>
             <Button
               type="button"
-              size="sm"
+              size="xs"
               variant="outline"
               disabled={!selectedIds.length || formatBatch.isPending}
               onClick={() => formatBatch.mutate(selectedIds)}
@@ -441,15 +436,15 @@ export function ShipmentsPage() {
             </Button>
             <Button
               type="button"
-              size="sm"
+              size="xs"
               disabled={!selectedIds.length || generate.isPending}
               onClick={() => generate.mutate(selectedIds)}
             >
               Generar guías
             </Button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <MockModeBanner providers={["envia"]} />
 

@@ -6,6 +6,7 @@ import { apiClient } from "@/lib/apiClient";
 import { DataTable } from "@/components/data/DataTable";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type Customer = {
   id: string;
@@ -78,22 +79,21 @@ export function CustomersPage() {
   );
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="label-caps text-text-muted">Contabilidad</p>
-          <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">Clientes</h1>
-          <p className="mt-2 max-w-xl text-text-muted">
-            Se crean al consolidar ventas y se sincronizan con Alegra antes de facturar.
-          </p>
-        </div>
-        <Link
-          to="/accounting"
-          className="inline-flex min-h-11 items-center rounded-[999px] border border-line px-6 label-caps"
-        >
-          Facturas
-        </Link>
-      </header>
+    <div className="space-y-3">
+      <PageHeader
+        eyebrow="Contabilidad"
+        title="Clientes"
+        actions={
+          <>
+            <Link
+              to="/accounting"
+              className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps"
+            >
+              Facturas
+            </Link>
+          </>
+        }
+      />
 
       <DataTable
         data={customers.data || []}

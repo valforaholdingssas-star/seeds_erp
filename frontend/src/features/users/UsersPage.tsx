@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Alert } from "@/components/ui/Alert";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type UserRow = {
   id: string;
@@ -93,14 +94,8 @@ export function UsersPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <header>
-        <p className="label-caps text-text-muted">Usuarios y roles</p>
-        <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">Equipo</h1>
-        <p className="mt-2 max-w-xl text-text-muted">
-          Administra quién acompaña cada módulo. Solo ADMIN puede crear o editar.
-        </p>
-      </header>
+    <div className="space-y-3">
+      <PageHeader eyebrow="Usuarios" title="Equipo" />
 
       <Card>
         <form onSubmit={onSubmit} className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">

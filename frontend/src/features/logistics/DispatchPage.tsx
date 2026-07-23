@@ -6,6 +6,7 @@ import { DataTable } from "@/components/data/DataTable";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { cn } from "@/lib/utils";
 
 type DispatchRow = {
@@ -263,53 +264,49 @@ export function DispatchPage() {
   );
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="label-caps text-text-muted">Bodega</p>
-          <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">Despachos</h1>
-          <p className="mt-2 max-w-xl text-text-muted">
-            Vista de cajas para empacar, lista de guías y marca de enviado (descuenta inventario).
-          </p>
-          <div className="seeds-divider mt-4 max-w-sm">✦</div>
-        </div>
-        {tab === "ready" ? (
-          <Button
-            type="button"
-            disabled={!selected.length || markSent.isPending}
-            onClick={() => markSent.mutate(selected.map((s) => s.id))}
-          >
-            Marcar enviado
-          </Button>
-        ) : null}
-      </header>
-
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant={tab === "pack" ? "primary-dark" : "outline"}
-          onClick={() => setTab("pack")}
-        >
-          Empacar
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={tab === "ready" ? "primary-dark" : "outline"}
-          onClick={() => setTab("ready")}
-        >
-          Listos
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={tab === "sent" ? "primary-dark" : "outline"}
-          onClick={() => setTab("sent")}
-        >
-          Enviados
-        </Button>
-      </div>
+    <div className="space-y-3">
+      <PageHeader
+        eyebrow="Bodega"
+        title="Despachos"
+        actions={
+          <>
+            <Button
+              type="button"
+              size="xs"
+              variant={tab === "pack" ? "primary-dark" : "outline"}
+              onClick={() => setTab("pack")}
+            >
+              Empacar
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant={tab === "ready" ? "primary-dark" : "outline"}
+              onClick={() => setTab("ready")}
+            >
+              Listos
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant={tab === "sent" ? "primary-dark" : "outline"}
+              onClick={() => setTab("sent")}
+            >
+              Enviados
+            </Button>
+            {tab === "ready" ? (
+              <Button
+                type="button"
+                size="xs"
+                disabled={!selected.length || markSent.isPending}
+                onClick={() => markSent.mutate(selected.map((s) => s.id))}
+              >
+                Marcar enviado
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
       {tab === "pack" ? (
         <PackBoxesView summary={pack.data} />

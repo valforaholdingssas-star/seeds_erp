@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type PaymentMethod = {
   id: string;
@@ -141,18 +142,8 @@ export function PaymentMethodsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <header>
-        <p className="label-caps text-text-muted">Parametrización</p>
-        <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">
-          Medios de pago
-        </h1>
-        <p className="mt-2 max-w-2xl text-text-muted">
-          Nutren el desplegable de ventas. Si renombras uno, el cambio se propaga a las
-          compras asociadas.
-        </p>
-        <div className="seeds-divider mt-4 max-w-sm">✦</div>
-      </header>
+    <div className="space-y-3">
+      <PageHeader eyebrow="Parametrización" title="Medios de pago" />
 
       {error ? <Alert variant="error">{error}</Alert> : null}
 

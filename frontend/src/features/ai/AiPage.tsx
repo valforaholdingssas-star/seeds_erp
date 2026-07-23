@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type AskResult = {
   answer: string;
@@ -81,15 +82,8 @@ export function AiPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <header>
-        <p className="label-caps text-text-muted">Inteligencia</p>
-        <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">Asistente ERP</h1>
-        <p className="mt-2 max-w-2xl text-text-muted">
-          Consultas seguras vía herramientas (ventas) y RAG mock sobre políticas/productos. Sin SQL
-          libre; sin acciones fiscales autónomas.
-        </p>
-      </header>
+    <div className="space-y-3">
+      <PageHeader eyebrow="Inteligencia" title="Asistente ERP" />
 
       {error && <Alert variant="error">{error}</Alert>}
 

@@ -7,6 +7,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export function SalesResyncPage() {
   const openBatch = useBatchConsole((s) => s.openBatch);
@@ -44,24 +45,21 @@ export function SalesResyncPage() {
   });
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="label-caps text-text-muted">Ventas · Ecommerce</p>
-          <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">
-            Resync WooCommerce
-          </h1>
-          <p className="mt-2 max-w-xl text-text-muted">
-            Consulta órdenes por rango y reconcilia estados en el ERP (lote secuencial).
-          </p>
-        </div>
-        <Link
-          to="/sales"
-          className="inline-flex min-h-11 items-center rounded-[999px] border border-line px-6 label-caps"
-        >
-          Volver
-        </Link>
-      </header>
+    <div className="space-y-3">
+      <PageHeader
+        eyebrow="Ventas"
+        title="Resync WooCommerce"
+        actions={
+          <>
+            <Link
+              to="/sales"
+              className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps"
+            >
+              Volver
+            </Link>
+          </>
+        }
+      />
 
       {error && <Alert variant="error">{error}</Alert>}
       {msg && <Alert variant="info">{msg}</Alert>}

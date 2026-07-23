@@ -6,6 +6,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input, Textarea } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { KIT_TYPES } from "@/lib/kitTypes";
 
@@ -103,16 +104,21 @@ export function InternalSaleFormPage({ mode }: { mode: Mode }) {
   const title = mode === "ferias" ? "Venta de feria" : "Venta manual";
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
-      <header>
-        <Link to="/sales" className="label-caps text-text-muted hover:text-green-900">
-          ← Consolidado
-        </Link>
-        <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">{title}</h1>
-        <p className="mt-2 text-text-muted">
-          Se escribe en origen y se promueve al consolidado si el estado es válido.
-        </p>
-      </header>
+    <div className="mx-auto max-w-3xl space-y-3">
+      <PageHeader
+        eyebrow="Ventas"
+        title={title}
+        actions={
+          <>
+            <Link
+              to="/sales"
+              className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps"
+            >
+              Volver
+            </Link>
+          </>
+        }
+      />
 
       <Card>
         <form onSubmit={onSubmit} className="grid gap-4 md:grid-cols-2">

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type Seller = {
   id: string;
@@ -195,15 +196,8 @@ export function SellersPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <header>
-        <p className="label-caps text-text-muted">Comercial</p>
-        <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">Vendedores</h1>
-        <p className="mt-2 max-w-2xl text-text-muted">
-          Parametriza el equipo comercial. ECOMMERCE y FERIAS son de sistema. Los alias
-          resuelven el texto crudo que llega de Kommo u otros canales.
-        </p>
-      </header>
+    <div className="space-y-3">
+      <PageHeader eyebrow="Comercial" title="Vendedores" />
 
       <Card>
         <form onSubmit={onSubmit} className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">

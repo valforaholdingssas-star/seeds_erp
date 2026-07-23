@@ -9,6 +9,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { MockModeBanner } from "@/components/ui/MockModeBanner";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { formatCOP } from "@/lib/utils";
 import { useBatchConsole } from "@/features/batch/batchStore";
 
@@ -193,61 +194,58 @@ export function InvoicesPage() {
   );
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="label-caps text-text-muted">Contabilidad</p>
-          <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">Facturas</h1>
-          <p className="mt-2 max-w-2xl text-text-muted">
-            Emisión idempotente a Alegra. El vino marca acciones fiscales irreversibles.
-          </p>
-          <div className="seeds-divider mt-4 max-w-sm">✦</div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant={view === "tabla" ? "primary-dark" : "outline"}
-            onClick={() => setView("tabla")}
-          >
-            Tabla
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={view === "kanban" ? "primary-dark" : "outline"}
-            onClick={() => setView("kanban")}
-          >
-            Kanban
-          </Button>
-          <Link
-            to="/accounting/refunds"
-            className="inline-flex min-h-9 items-center rounded-[999px] border border-line px-4 label-caps"
-          >
-            Reembolsos
-          </Link>
-          <Link
-            to="/accounting/iva"
-            className="inline-flex min-h-9 items-center rounded-[999px] border border-line px-4 label-caps"
-          >
-            IVA
-          </Link>
-          <Link
-            to="/accounting/customers"
-            className="inline-flex min-h-9 items-center rounded-[999px] border border-line px-4 label-caps"
-          >
-            Clientes
-          </Link>
-          <Button
-            type="button"
-            variant="primary-wine"
-            disabled={!selected.length || bulk.isPending || view !== "tabla"}
-            onClick={() => bulk.mutate(selected.map((s) => s.id))}
-          >
-            Emitir lote
-          </Button>
-        </div>
-      </header>
+    <div className="space-y-3">
+      <PageHeader
+        eyebrow="Contabilidad"
+        title="Facturas"
+        actions={
+          <>
+            <Button
+              type="button"
+              size="xs"
+              variant={view === "tabla" ? "primary-dark" : "outline"}
+              onClick={() => setView("tabla")}
+            >
+              Tabla
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant={view === "kanban" ? "primary-dark" : "outline"}
+              onClick={() => setView("kanban")}
+            >
+              Kanban
+            </Button>
+            <Link
+              to="/accounting/refunds"
+              className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps"
+            >
+              Reembolsos
+            </Link>
+            <Link
+              to="/accounting/iva"
+              className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps"
+            >
+              IVA
+            </Link>
+            <Link
+              to="/accounting/customers"
+              className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps"
+            >
+              Clientes
+            </Link>
+            <Button
+              type="button"
+              size="xs"
+              variant="primary-wine"
+              disabled={!selected.length || bulk.isPending || view !== "tabla"}
+              onClick={() => bulk.mutate(selected.map((s) => s.id))}
+            >
+              Emitir lote
+            </Button>
+          </>
+        }
+      />
 
       {msg ? <Alert variant="info">{msg}</Alert> : null}
 

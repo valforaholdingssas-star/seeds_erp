@@ -3,8 +3,10 @@ import { useMemo, useState } from "react";
 import { apiClient } from "@/lib/apiClient";
 import { BarChart, DonutChart, LineChart } from "@/components/charts/SimpleCharts";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { formatCOP } from "@/lib/utils";
 
 type Overview = {
@@ -130,32 +132,26 @@ export function AnalyticsPage() {
   );
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="label-caps text-text-muted">Analítica</p>
-          <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">Métricas</h1>
-          <p className="mt-2 max-w-xl text-text-muted">
-            Reemplazo del panel Looker — KPIs, canales, comerciales y series temporales.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {(["global", "canal", "comercial"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`rounded-[999px] border px-4 py-2 label-caps ${
-                tab === t
-                  ? "border-green-900 bg-green-900 text-text-on-dark"
-                  : "border-line text-text-muted"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </header>
+    <div className="space-y-3">
+      <PageHeader
+        eyebrow="Analítica"
+        title="Métricas"
+        actions={
+          <>
+            {(["global", "canal", "comercial"] as const).map((t) => (
+              <Button
+                key={t}
+                type="button"
+                size="xs"
+                variant={tab === t ? "primary-dark" : "outline"}
+                onClick={() => setTab(t)}
+              >
+                {t}
+              </Button>
+            ))}
+          </>
+        }
+      />
 
       <Card tone="warm-white" className="grid gap-4 sm:grid-cols-4">
         <div>

@@ -6,6 +6,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { formatCOP } from "@/lib/utils";
 import { formatSaleItemLine } from "@/lib/kitTypes";
 
@@ -112,38 +113,36 @@ export function SaleDetailPage() {
   const s = sale.data;
 
   return (
-    <div className="space-y-8" data-testid="sale-detail">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="label-caps text-text-muted">Ventas · detalle</p>
-          <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">
-            {s.customer_name || s.external_id}
-          </h1>
-          <p className="mt-2 text-text-muted">
-            {s.external_id} · {s.source}
-          </p>
-          <div className="seeds-divider mt-4 max-w-sm">✦</div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            to="/sales"
-            className="inline-flex min-h-9 items-center rounded-[999px] border border-line px-4 label-caps"
-          >
-            Volver
-          </Link>
-          {s.state === "ACTIVE" ? (
-            <Button
-              type="button"
-              variant="primary-wine"
-              size="sm"
-              onClick={() => withdraw.mutate()}
-              disabled={withdraw.isPending}
+    <div className="space-y-3" data-testid="sale-detail">
+      <PageHeader
+        eyebrow="Ventas"
+        title={s.customer_name || s.external_id}
+        actions={
+          <>
+            <Link
+              to="/sales"
+              className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps"
             >
-              Retirar
-            </Button>
-          ) : null}
-        </div>
-      </header>
+              Volver
+            </Link>
+            {s.state === "ACTIVE" ? (
+              <Button
+                type="button"
+                variant="primary-wine"
+                size="xs"
+                onClick={() => withdraw.mutate()}
+                disabled={withdraw.isPending}
+              >
+                Retirar
+              </Button>
+            ) : null}
+          </>
+        }
+      />
+
+      <p className="text-sm text-text-muted">
+        {s.external_id} · {s.source}
+      </p>
 
       <div className="flex flex-wrap gap-2">
         <Badge variant="dark">{s.source}</Badge>

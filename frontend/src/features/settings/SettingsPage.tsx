@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Alert } from "@/components/ui/Alert";
 import { MockModeBanner } from "@/components/ui/MockModeBanner";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type SettingItem = {
   key: string;
@@ -105,16 +106,8 @@ export function SettingsPage() {
   }, [config.data]);
 
   return (
-    <div className="space-y-8">
-      <header>
-        <p className="label-caps text-text-muted">Configuración</p>
-        <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">
-          Integraciones y parámetros
-        </h1>
-        <p className="mt-2 max-w-2xl text-text-muted">
-          Los secretos se cifran en base de datos. La API nunca los revela: solo ves una máscara.
-        </p>
-      </header>
+    <div className="space-y-3">
+      <PageHeader eyebrow="Configuración" title="Integraciones y parámetros" />
 
       <MockModeBanner />
 

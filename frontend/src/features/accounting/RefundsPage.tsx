@@ -7,6 +7,7 @@ import { DataTable } from "@/components/data/DataTable";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type Refund = {
   id: string;
@@ -85,22 +86,21 @@ export function RefundsPage() {
   );
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="label-caps text-text-muted">Contabilidad</p>
-          <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">Reembolsos</h1>
-          <p className="mt-2 max-w-xl text-text-muted">
-            Notas crédito emitidas. Confirma la anulación manual cuando esté lista en Alegra/DIAN.
-          </p>
-        </div>
-        <Link
-          to="/accounting"
-          className="inline-flex min-h-11 items-center rounded-[999px] border border-line px-6 label-caps"
-        >
-          Facturas
-        </Link>
-      </header>
+    <div className="space-y-3">
+      <PageHeader
+        eyebrow="Contabilidad"
+        title="Reembolsos"
+        actions={
+          <>
+            <Link
+              to="/accounting"
+              className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps"
+            >
+              Facturas
+            </Link>
+          </>
+        }
+      />
       {msg && <Alert variant="success">{msg}</Alert>}
       <DataTable
         data={refunds.data || []}

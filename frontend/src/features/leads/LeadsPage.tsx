@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type LeadStatus = "NUEVO" | "CONTACTADO" | "CALIFICADO" | "CONVERTIDO" | "DESCARTADO";
 
@@ -165,34 +166,31 @@ export function LeadsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="label-caps text-text-muted">Comercial</p>
-          <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">Leads</h1>
-          <p className="mt-2 max-w-xl text-text-muted">
-            Arrastra tarjetas entre columnas. Las transiciones inválidas se rechazan al soltar.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant={view === "kanban" ? "primary-dark" : "outline"}
-            size="sm"
-            onClick={() => setView("kanban")}
-          >
-            Kanban
-          </Button>
-          <Button
-            type="button"
-            variant={view === "tabla" ? "primary-dark" : "outline"}
-            size="sm"
-            onClick={() => setView("tabla")}
-          >
-            Tabla
-          </Button>
-        </div>
-      </header>
+    <div className="space-y-3">
+      <PageHeader
+        eyebrow="Comercial"
+        title="Leads"
+        actions={
+          <>
+            <Button
+              type="button"
+              variant={view === "kanban" ? "primary-dark" : "outline"}
+              size="xs"
+              onClick={() => setView("kanban")}
+            >
+              Kanban
+            </Button>
+            <Button
+              type="button"
+              variant={view === "tabla" ? "primary-dark" : "outline"}
+              size="xs"
+              onClick={() => setView("tabla")}
+            >
+              Tabla
+            </Button>
+          </>
+        }
+      />
 
       {error && <Alert variant="error">{error}</Alert>}
 

@@ -205,45 +205,47 @@ export function DataTable<T extends { id: string }>({
   }
 
   return (
-    <div className="space-y-4">
-      {/* Barra de herramientas */}
-      <div className="relative z-20 flex flex-col gap-3 rounded-[28px] border border-line bg-warm-white/90 p-3 shadow-[var(--shadow-1)] sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4">
-        <div className="relative min-w-0 flex-1">
-          <Search
-            strokeWidth={1.5}
-            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-soft"
-          />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar…"
-            aria-label="Buscar"
-            className="w-full rounded-[999px] border border-line bg-cream-100/80 py-2.5 pl-10 pr-4 text-sm text-text-dark outline-none transition-all focus:border-green-900/30 focus:ring-2 focus:ring-sage-500/25"
-          />
-        </div>
+    <div className="space-y-3">
+      {/* Barra compacta — no full-bleed */}
+      <div className="relative z-20 flex justify-start">
+        <div className="inline-flex max-w-full flex-nowrap items-center gap-1.5 rounded-[999px] border border-line/80 bg-warm-white/70 py-1 pl-1 pr-2 shadow-[var(--shadow-1)] backdrop-blur-sm sm:gap-2 sm:pr-3">
+          <div className="relative w-[min(100%,14rem)] shrink-0 sm:w-56">
+            <Search
+              strokeWidth={1.5}
+              className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-soft"
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar…"
+              aria-label="Buscar"
+              className="w-full rounded-[999px] border-0 bg-cream-100/70 py-1.5 pl-9 pr-3 text-sm text-text-dark outline-none transition-all placeholder:text-text-soft focus:bg-cream-100 focus:ring-2 focus:ring-sage-500/20"
+            />
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {toolbarActions}
-          {columnFilters.length > 0 ? (
-            <Button type="button" size="sm" variant="primary-dark" onClick={openFilters}>
-              <Filter strokeWidth={1.5} className="h-3.5 w-3.5" />
-              Filtros
-              {activeFilterCount > 0 ? (
-                <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-text-on-dark/20 px-1.5 text-[10px]">
-                  {activeFilterCount}
-                </span>
-              ) : null}
-            </Button>
-          ) : null}
-          {exportFilename !== undefined ? (
-            <Button type="button" size="sm" variant="outline" onClick={exportCsv}>
-              <Download strokeWidth={1.5} className="h-3.5 w-3.5" />
-              Exportar
-            </Button>
-          ) : null}
-          <span className="hidden label-caps text-text-soft sm:inline">
-            {filtered.length} reg.
-          </span>
+          <div className="flex flex-nowrap items-center gap-1.5">
+            {toolbarActions}
+            {columnFilters.length > 0 ? (
+              <Button type="button" size="xs" variant="primary-dark" onClick={openFilters}>
+                <Filter strokeWidth={1.5} className="h-3 w-3" />
+                Filtros
+                {activeFilterCount > 0 ? (
+                  <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-text-on-dark/20 px-1 text-[9px]">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
+              </Button>
+            ) : null}
+            {exportFilename !== undefined ? (
+              <Button type="button" size="xs" variant="outline" onClick={exportCsv}>
+                <Download strokeWidth={1.5} className="h-3 w-3" />
+                Exportar
+              </Button>
+            ) : null}
+            <span className="hidden whitespace-nowrap px-1 label-caps text-text-soft sm:inline">
+              {filtered.length} reg.
+            </span>
+          </div>
         </div>
       </div>
 

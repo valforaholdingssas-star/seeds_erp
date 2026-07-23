@@ -6,6 +6,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type DryRun = {
   headers: string[];
@@ -96,26 +97,21 @@ export function SalesImportPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="label-caps text-text-muted">Ventas</p>
-          <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">
-            Importar CSV / XLSX
-          </h1>
-          <p className="mt-2 max-w-xl text-text-muted">
-            Sube CSV o Excel → dry-run con errores/duplicados → confirma. Idempotente por
-            (source, external_id).
-          </p>
-          <div className="seeds-divider mt-4 max-w-sm">✦</div>
-        </div>
-        <Link
-          to="/sales"
-          className="inline-flex min-h-11 items-center rounded-[999px] border border-line px-6 label-caps"
-        >
-          Volver a ventas
-        </Link>
-      </header>
+    <div className="space-y-3">
+      <PageHeader
+        eyebrow="Ventas"
+        title="Importar CSV / XLSX"
+        actions={
+          <>
+            <Link
+              to="/sales"
+              className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps"
+            >
+              Volver a ventas
+            </Link>
+          </>
+        }
+      />
 
       {error && <Alert variant="error">{error}</Alert>}
 

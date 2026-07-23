@@ -6,6 +6,7 @@ import { DataTable } from "@/components/data/DataTable";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type EventRow = {
   id: string;
@@ -81,17 +82,8 @@ export function FailedEventsPage() {
   );
 
   return (
-    <div className="space-y-8">
-      <header>
-        <p className="label-caps text-text-muted">Integraciones</p>
-        <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">
-          Eventos fallidos
-        </h1>
-        <p className="mt-2 max-w-xl text-text-muted">
-          Webhooks que no consolidaron. Reprocesa sin perder el payload crudo.
-        </p>
-        <div className="seeds-divider mt-6">✦</div>
-      </header>
+    <div className="space-y-3">
+      <PageHeader eyebrow="Integraciones" title="Eventos fallidos" />
       {msg && <Alert variant="success">{msg}</Alert>}
       <DataTable
         data={events.data || []}

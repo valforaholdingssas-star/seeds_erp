@@ -9,6 +9,7 @@ import { KanbanBoard, type KanbanItem } from "@/components/kanban/KanbanBoard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { InlineSelect } from "@/components/ui/InlineSelect";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { formatCOP } from "@/lib/utils";
 import { formatSaleItemLine } from "@/lib/kitTypes";
 
@@ -280,23 +281,15 @@ export function SalesPage() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-[32px] border border-line bg-warm-white/90 p-5 shadow-[var(--shadow-1)] sm:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <p className="label-caps text-text-muted">Ventas / Consolidado</p>
-            <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">
-              Consolidado
-            </h1>
-            <p className="mt-2 max-w-xl text-sm text-text-muted">
-              Solo processing/completed. Clic en medio de pago o entrega para editar en
-              la fila.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-3">
+      <PageHeader
+        eyebrow="Ventas"
+        title="Consolidado"
+        actions={
+          <>
             <Button
               type="button"
-              size="sm"
+              size="xs"
               variant={view === "tabla" ? "primary-dark" : "outline"}
               onClick={() => setView("tabla")}
             >
@@ -304,7 +297,7 @@ export function SalesPage() {
             </Button>
             <Button
               type="button"
-              size="sm"
+              size="xs"
               variant={view === "kanban" ? "primary-dark" : "outline"}
               onClick={() => setView("kanban")}
             >
@@ -312,31 +305,31 @@ export function SalesPage() {
             </Button>
             <Link
               to="/sales/resync"
-              className="inline-flex min-h-9 items-center justify-center rounded-[999px] border border-line px-4 label-caps text-green-900 hover:bg-cream-100"
+              className="inline-flex min-h-7 items-center justify-center rounded-[999px] border border-line px-3 text-[10px] label-caps text-green-900 hover:bg-cream-100"
             >
               Resync Woo
             </Link>
             <Link
               to="/sales/import"
-              className="inline-flex min-h-9 items-center justify-center rounded-[999px] border border-line px-4 label-caps text-green-900 hover:bg-cream-100"
+              className="inline-flex min-h-7 items-center justify-center rounded-[999px] border border-line px-3 text-[10px] label-caps text-green-900 hover:bg-cream-100"
             >
               Importar
             </Link>
             <Link
               to="/sales/ferias"
-              className="inline-flex min-h-9 items-center justify-center rounded-[999px] border border-line px-4 label-caps text-green-900 hover:bg-cream-100"
+              className="inline-flex min-h-7 items-center justify-center rounded-[999px] border border-line px-3 text-[10px] label-caps text-green-900 hover:bg-cream-100"
             >
               Feria
             </Link>
             <Link
               to="/sales/manual"
-              className="inline-flex min-h-9 items-center justify-center rounded-[999px] bg-green-900 px-4 label-caps text-text-on-dark hover:bg-green-950"
+              className="inline-flex min-h-7 items-center justify-center rounded-[999px] bg-green-900 px-3 text-[10px] label-caps text-text-on-dark hover:bg-green-950"
             >
               Manual
             </Link>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {view === "kanban" ? (
         <KanbanBoard

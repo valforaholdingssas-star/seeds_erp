@@ -478,7 +478,7 @@ export function AppShell() {
             Tu cuerpo, tu jardín <span className="spark">✦</span> operación calmada
           </p>
         </div>
-        <main className="animate-[fade-up_520ms_var(--ease-soft)] flex-1 px-4 py-6 sm:px-8 sm:py-8">
+        <main className="animate-[fade-up_520ms_var(--ease-soft)] flex-1 px-4 py-4 sm:px-8 sm:py-5">
           <Outlet />
         </main>
         <BatchConsole />

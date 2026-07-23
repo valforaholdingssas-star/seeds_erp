@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { apiClient } from "@/lib/apiClient";
 import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { formatCOP } from "@/lib/utils";
 
 type IvaSummary = {
@@ -34,22 +35,21 @@ export function IvaPage() {
   const s = summary.data;
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="label-caps text-text-muted">Contabilidad</p>
-          <h1 className="mt-2 font-serif text-4xl tracking-tight text-green-900">IVA</h1>
-          <p className="mt-2 max-w-xl text-text-muted">
-            Resumen fiscal del período: IVA generado en ventas vs facturas emitidas.
-          </p>
-        </div>
-        <Link
-          to="/accounting"
-          className="inline-flex min-h-11 items-center rounded-[999px] border border-line px-6 label-caps"
-        >
-          Facturas
-        </Link>
-      </header>
+    <div className="space-y-3">
+      <PageHeader
+        eyebrow="Contabilidad"
+        title="IVA"
+        actions={
+          <>
+            <Link
+              to="/accounting"
+              className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps"
+            >
+              Facturas
+            </Link>
+          </>
+        }
+      />
 
       <Card tone="cream" className="grid max-w-xl gap-4 sm:grid-cols-2">
         <div>
