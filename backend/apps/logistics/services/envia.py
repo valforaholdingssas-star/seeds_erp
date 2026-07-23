@@ -73,24 +73,45 @@ def _envia_base_url() -> str:
     return "https://api-test.envia.com"
 
 
+def _cfg_str(key: str, default: str = "") -> str:
+    raw = cfg.get(key, default)
+    if raw is None:
+        return default
+    return str(raw)
+
+
 def build_generate_payload(shipment) -> dict[str, Any]:
+    """
+    Payload alineado al JSON que funcionaba en n8n.
+    Origen Seeds es parametrizable vía Configuración → ENVIA.
+    """
     sale = shipment.sale
     geo = shipment.geo_city
-    # Envia CO: city + postalCode usan código DANE (ej. Bogotá 11001000).
-    origin_dane = "11001000"
     dest_dane = (geo.municipality_code if geo else "") or ""
+    dest_state = _co_state_code(
+        shipment.geo_state_code or (geo.department_iso if geo else "")
+    )
+    # n8n enviaba postalCode: "" (clave presente, valor vacío).
+    origin_postal = _cfg_str("envia.origin_postal_code", "")
+    dest_postal = ""
+
     origin = {
         "name": f"{sale.external_id} - Seeds",
-        "company": "Seeds",
-        "email": "seeds.atencion@gmail.com",
-        "phone": "3507047110",
-        "street": "Ak 7 #155C-30",
-        "number": "North Point Torre E Oficina 1502",
-        "city": origin_dane,
-        "state": "DC",
-        "country": "CO",
-        "postalCode": origin_dane,
-        "identification": "901908375",
+        "company": _cfg_str("envia.origin_company", "Seeds"),
+        "email": _cfg_str("envia.origin_email", "seeds.atencion@gmail.com"),
+        "phone_code": _cfg_str("envia.origin_phone_code", "CO"),
+        "phone": _cfg_str("envia.origin_phone", "3507047110"),
+        "street": _cfg_str("envia.origin_street", "Ak 7 #155C-30"),
+        "number": _cfg_str("envia.origin_number", "North Point Torre E Oficina 1502"),
+        "district": "",
+        "city": _cfg_str("envia.origin_city", "11001000"),
+        "state": _cfg_str("envia.origin_state", "DC"),
+        "country": _cfg_str("envia.origin_country", "CO"),
+        "postalCode": origin_postal,
+        "reference": "",
+        "type": "origin",
+        "address_id": "",
+        "identification": _cfg_str("envia.origin_identification", "901908375"),
     }
     destination = {
         "name": sale.customer_name or sale.external_id,
@@ -98,15 +119,21 @@ def build_generate_payload(shipment) -> dict[str, Any]:
         "email": sale.email or "noreply@seeds.co",
         "phone": sale.phone or "3000000000",
         "country": "CO",
-        "street": shipment.address_formatted or shipment.address_mirror,
-        "number": ".",
+        "street": shipment.address_formatted or shipment.address_mirror or "",
+        "number": "",
+        "district": "",
         "city": dest_dane,
-        "state": _co_state_code(
-            shipment.geo_state_code or (geo.department_iso if geo else "")
-        ),
-        "postalCode": dest_dane,
+        "state": dest_state,
+        "postalCode": dest_postal,
+        "reference": "",
         "identification": sale.id_number or "0",
     }
+    carrier = (shipment.carrier or "").strip() or _cfg_str(
+        "envia.default_carrier", "coordinadora"
+    )
+    service = (shipment.service or "").strip() or _cfg_str(
+        "envia.default_service", "ground"
+    )
     return {
         "origin": origin,
         "destination": destination,
@@ -124,14 +151,14 @@ def build_generate_payload(shipment) -> dict[str, Any]:
             }
         ],
         "shipment": {
-            "carrier": shipment.carrier or "coordinadora",
-            "service": shipment.service or "ground",
+            "carrier": carrier,
+            "service": service,
             "type": 1,
         },
         "settings": {
             "printFormat": "PDF",
             "printSize": "STOCK_4X6",
-            "comments": f"Guía creada automáticamente - Cliente {sale.external_id}",
+            "comments": f"Guía creada automáticamente- Cliente {sale.external_id}",
         },
     }
 
