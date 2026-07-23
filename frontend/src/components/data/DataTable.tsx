@@ -4,6 +4,7 @@ import {
   useReactTable,
   type ColumnDef,
   type RowSelectionState,
+  type Table,
 } from "@tanstack/react-table";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Download, Filter, Search, X } from "lucide-react";
@@ -32,6 +33,24 @@ export type DataTableProps<T> = {
   toolbarActions?: ReactNode;
   hint?: string;
 };
+
+function SelectAllHeader<T>({ table }: { table: Table<T> }) {
+  const allSelected = table.getIsAllRowsSelected();
+  const someSelected = table.getIsSomeRowsSelected();
+  return (
+    <input
+      type="checkbox"
+      aria-label="Seleccionar todos"
+      title="Seleccionar todos"
+      checked={allSelected}
+      ref={(el) => {
+        if (el) el.indeterminate = someSelected && !allSelected;
+      }}
+      onChange={table.getToggleAllRowsSelectedHandler()}
+      className="h-4 w-4 accent-green-900"
+    />
+  );
+}
 
 export function DataTable<T extends { id: string }>({
   data,
@@ -85,9 +104,37 @@ export function DataTable<T extends { id: string }>({
     return rows;
   }, [data, query, searchableKeys, filters]);
 
+  // Drop selection for rows no longer visible after filter/search.
+  useEffect(() => {
+    const visible = new Set(filtered.map((r) => r.id));
+    setRowSelection((prev) => {
+      const next: RowSelectionState = {};
+      let changed = false;
+      for (const [id, on] of Object.entries(prev)) {
+        if (on && visible.has(id)) next[id] = true;
+        else if (on) changed = true;
+      }
+      if (!changed && Object.keys(next).length === Object.keys(prev).length) {
+        return prev;
+      }
+      return next;
+    });
+  }, [filtered]);
+
+  const resolvedColumns = useMemo(() => {
+    return columns.map((col) => {
+      if (col.id !== "select") return col;
+      return {
+        ...col,
+        header: ({ table }: { table: Table<T> }) => <SelectAllHeader table={table} />,
+        size: 40,
+      } as ColumnDef<T, unknown>;
+    });
+  }, [columns]);
+
   const table = useReactTable({
     data: filtered,
-    columns,
+    columns: resolvedColumns,
     state: { rowSelection },
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
@@ -144,7 +191,7 @@ export function DataTable<T extends { id: string }>({
   return (
     <div className="space-y-4">
       {/* Barra de herramientas */}
-      <div className="flex flex-col gap-3 rounded-[28px] border border-line bg-warm-white/90 p-3 shadow-[var(--shadow-1)] sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4">
+      <div className="relative z-20 flex flex-col gap-3 rounded-[28px] border border-line bg-warm-white/90 p-3 shadow-[var(--shadow-1)] sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4">
         <div className="relative min-w-0 flex-1">
           <Search
             strokeWidth={1.5}
@@ -185,7 +232,7 @@ export function DataTable<T extends { id: string }>({
       </div>
 
       {activeFilterCount > 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="relative z-20 flex flex-wrap items-center gap-2">
           {columnFilters.map((f) => {
             const val = filters[f.key];
             if (!val?.trim()) return null;
@@ -214,7 +261,7 @@ export function DataTable<T extends { id: string }>({
       {hint ? <p className="text-sm text-text-muted">{hint}</p> : null}
 
       {selected.length > 0 && bulkActions ? (
-        <div className="sticky bottom-4 z-10 flex flex-wrap items-center gap-3 rounded-[24px] border border-green-900/15 bg-green-900 px-5 py-3 text-text-on-dark shadow-[var(--shadow-2)]">
+        <div className="relative z-20 flex flex-wrap items-center gap-3 rounded-[24px] border border-green-900/15 bg-green-900 px-5 py-3 text-text-on-dark shadow-[var(--shadow-2)]">
           <span className="label-caps text-text-on-dark-muted">{selected.length} seleccionados</span>
           <span className="spark" aria-hidden>
             ✦
@@ -230,7 +277,7 @@ export function DataTable<T extends { id: string }>({
         </div>
       ) : null}
 
-      <div className="seeds-panel overflow-hidden rounded-[28px] border border-line shadow-[var(--shadow-1)]">
+      <div className="seeds-panel relative z-0 overflow-hidden rounded-[28px] border border-line shadow-[var(--shadow-1)]">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
             <thead className="bg-green-900/[0.04]">
@@ -252,7 +299,7 @@ export function DataTable<T extends { id: string }>({
             <tbody>
               {table.getRowModel().rows.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length} className="px-6 py-16 text-center">
+                  <td colSpan={resolvedColumns.length} className="px-6 py-16 text-center">
                     <p className="font-serif text-2xl text-green-900">{emptyTitle}</p>
                     <p className="mt-2 text-text-muted">{emptyDescription}</p>
                   </td>
@@ -291,7 +338,13 @@ export function DataTable<T extends { id: string }>({
             aria-label="Cerrar filtros"
             onClick={() => setFiltersOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-lg animate-[fade-up_280ms_var(--ease-soft)] rounded-t-[32px] border border-line bg-cream-100 p-6 shadow-[var(--shadow-3)] sm:rounded-[32px] sm:p-8">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Filtros de tabla"
+            className="relative z-10 w-full max-w-lg animate-[fade-up_280ms_var(--ease-soft)] rounded-t-[32px] border border-line bg-cream-100 p-6 shadow-[var(--shadow-3)] sm:rounded-[32px] sm:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <p className="label-caps text-text-muted">Tabla</p>
