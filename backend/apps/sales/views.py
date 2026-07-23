@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.audit.services import log_audit_event
-from apps.integrations.models import IntegrationSource
+from apps.integrations.models import IntegrationSource, RawEventStatus
 from apps.sales.models import ConsolidatedSale, SaleState
 from apps.sales.serializers import (
     BulkUpdateSerializer,
@@ -332,6 +332,27 @@ class KommoWebhookView(APIView):
             signature="",
             dedupe_key=dedupe,
         )
-        if created:
-            process_raw_event.delay(str(event_obj.id))
-        return Response({"status": "accepted", "event_id": str(event_obj.id)}, status=200)
+        if not created:
+            # Same lead+status resent (e.g. after deleting the sale): re-queue.
+            event_obj.payload = flat
+            event_obj.status = RawEventStatus.RECEIVED
+            event_obj.error = ""
+            event_obj.processed_at = None
+            event_obj.save(
+                update_fields=[
+                    "payload",
+                    "status",
+                    "error",
+                    "processed_at",
+                    "updated_at",
+                ]
+            )
+        process_raw_event.delay(str(event_obj.id))
+        return Response(
+            {
+                "status": "accepted",
+                "event_id": str(event_obj.id),
+                "reprocessed": not created,
+            },
+            status=200,
+        )
