@@ -73,9 +73,25 @@ export function SettingsPage() {
     onSuccess: ({ group, data }) => {
       setTestModes((m) => ({ ...m, [group]: data }));
       setMessage(
-        data.mode === "mock" ? `${group}: modo MOCK — ${data.message}` : data.message,
+        data.mode === "mock"
+          ? `${group}: modo MOCK — ${data.message}`
+          : `${group}: ${data.ok ? "OK" : "Error"} — ${data.message}`,
       );
       qc.invalidateQueries({ queryKey: ["integration-status"] });
+    },
+    onError: (err: unknown, group: string) => {
+      const ax = err as {
+        response?: { data?: { message?: string; ok?: boolean; mode?: string } };
+        message?: string;
+      };
+      const data = ax.response?.data;
+      const msg =
+        data?.message || ax.message || "No se pudo probar la conexión.";
+      setTestModes((m) => ({
+        ...m,
+        [group]: { ok: false, message: msg, mode: data?.mode || "live" },
+      }));
+      setMessage(`${group}: Error — ${msg}`);
     },
   });
 
@@ -129,15 +145,24 @@ export function SettingsPage() {
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={test.isPending && test.variables === group}
                     onClick={() => test.mutate(group)}
                   >
-                    Probar conexión
+                    {test.isPending && test.variables === group
+                      ? "Probando…"
+                      : "Probar conexión"}
                   </Button>
                   <Button type="button" size="sm" onClick={() => save.mutate(group)}>
                     Guardar
                   </Button>
                 </div>
               </div>
+
+              {result ? (
+                <Alert variant={result.ok ? "info" : "error"} className="mb-4">
+                  {result.ok ? "Conexión OK" : "Falló la prueba"}: {result.message}
+                </Alert>
+              ) : null}
 
               <div className="grid gap-4 md:grid-cols-2">
                 {byGroup[group].map((setting) => (

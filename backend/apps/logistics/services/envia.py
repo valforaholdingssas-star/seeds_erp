@@ -184,6 +184,13 @@ def generate_label(shipment) -> dict[str, Any]:
         raise
 
 
+def _envia_queries_base_url() -> str:
+    env = cfg.get("envia.environment", "sandbox") or "sandbox"
+    if env == "production":
+        return "https://queries.envia.com"
+    return "https://queries-test.envia.com"
+
+
 def ping_envia() -> dict[str, Any]:
     token = _envia_token()
     if not token:
@@ -192,14 +199,15 @@ def ping_envia() -> dict[str, Any]:
             "message": "Sin token Envia — modo mock listo (guías simuladas).",
             "mode": "mock",
         }
-    url = f"{_envia_base_url()}/ship/carriers/"
+    # Shipping API /ship/carriers often 302; Queries API is the documented ping.
+    url = f"{_envia_queries_base_url()}/carrier?country_code=CO"
     try:
-        with httpx.Client(timeout=20.0) as client:
+        with httpx.Client(timeout=20.0, follow_redirects=True) as client:
             res = client.get(url, headers={"Authorization": f"Bearer {token}"})
         if res.status_code < 300:
             return {
                 "ok": True,
-                "message": f"Envia OK (HTTP {res.status_code}).",
+                "message": f"Envia OK — carriers CO (HTTP {res.status_code}).",
                 "status": res.status_code,
                 "mode": "live",
             }

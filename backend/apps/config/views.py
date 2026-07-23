@@ -69,25 +69,25 @@ class ConfigTestView(APIView):
             from apps.logistics.services.envia import ping_envia
 
             result = ping_envia()
-            return Response(result, status=200 if result.get("ok") or result.get("mode") == "mock" else 422)
+            return Response(result, status=200)
 
         if group == "ALEGRA":
             from apps.accounting.services.alegra import ping_alegra
 
             result = ping_alegra()
-            return Response(result, status=200 if result.get("ok") or result.get("mode") == "mock" else 422)
+            return Response(result, status=200)
 
         if group == "WOOCOMMERCE":
             from apps.sales.services.woo_client import ping_woocommerce
 
             result = ping_woocommerce()
-            return Response(result, status=200 if result.get("ok") else 422)
+            return Response(result, status=200)
 
         if group == "KOMMO":
             from apps.sales.services.kommo_client import ping_kommo
 
             result = ping_kommo()
-            return Response(result, status=200 if result.get("ok") else 422)
+            return Response(result, status=200)
 
         if has_secret_defs and not secrets_set:
             return Response(
@@ -98,7 +98,7 @@ class ConfigTestView(APIView):
                         "Configúralas en Configuración → Integraciones."
                     ),
                 },
-                status=422,
+                status=200,
             )
         return Response(
             {
