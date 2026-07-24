@@ -82,3 +82,18 @@ export function RequireAccountingAccess() {
   }
   return <Outlet />;
 }
+
+const FINANCE_ROLES: UserRole[] = [
+  "ADMIN",
+  "CONTABILIDAD",
+  "SUPERVISOR",
+  "VIEWER",
+];
+
+export function RequireFinanceAccess() {
+  const user = useAuthStore((s) => s.user);
+  if (!user || !FINANCE_ROLES.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+  return <Outlet />;
+}

@@ -390,6 +390,23 @@ SETTINGS: list[Setting] = [
         type=SettingType.SECRET,
         help="JSON completo de la service account con rol BigQuery Data Editor + Job User.",
     ),
+    # Finanzas
+    Setting(
+        key="finance.audit_tolerance",
+        label="Tolerancia auditoría ($)",
+        group="FINANZAS",
+        type=SettingType.INT,
+        default=1000,
+        help="Descuadre máximo diario banco vs reportes antes de marcar fuera de tolerancia.",
+    ),
+    Setting(
+        key="finance.interbank_efe_code",
+        label="Código EFE interbancario",
+        group="FINANZAS",
+        type=SettingType.STRING,
+        default="8.1",
+        help="Cuenta EFE que representa transferencias entre cuentas propias (Otros pasivos).",
+    ),
 ]
 
 SETTINGS_BY_KEY: dict[str, Setting] = {s.key: s for s in SETTINGS}

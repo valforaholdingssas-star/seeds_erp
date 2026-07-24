@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "apps.logistics.apps.LogisticsConfig",
     "apps.inventory",
     "apps.accounting.apps.AccountingConfig",
+    "apps.finance.apps.FinanceConfig",
     "apps.leads",
     "apps.ai",
     "apps.analytics",

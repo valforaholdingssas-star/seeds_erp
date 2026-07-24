@@ -23,6 +23,7 @@ MODULE_CATALOG: list[dict[str, str]] = [
     {"key": "dispatch", "label": "Despachos"},
     {"key": "inventory", "label": "Inventario"},
     {"key": "accounting", "label": "Contabilidad"},
+    {"key": "finance", "label": "Finanzas"},
     {"key": "integrations", "label": "Eventos / integraciones"},
     {"key": "sellers", "label": "Vendedores"},
     {"key": "payment_methods", "label": "Medios de pago"},
@@ -62,6 +63,7 @@ ROLE_DEFAULT_MODULES: dict[str, list[str]] = {
         "sales",
         "analytics",
         "accounting",
+        "finance",
         "inventory",
     ],
     Role.SUPERVISOR: [
@@ -74,6 +76,7 @@ ROLE_DEFAULT_MODULES: dict[str, list[str]] = {
         "dispatch",
         "inventory",
         "accounting",
+        "finance",
         "integrations",
         "geo",
     ],
@@ -86,6 +89,7 @@ ROLE_DEFAULT_MODULES: dict[str, list[str]] = {
         "dispatch",
         "inventory",
         "accounting",
+        "finance",
     ],
 }
 
@@ -346,6 +350,8 @@ ACTION_TO_CRUD: dict[str, Crud] = {
     "reopen": "u",
     "seed_system": "u",
     "resolve": "r",
+    "bulk_classify": "u",
+    "seed": "u",
 }
 
 

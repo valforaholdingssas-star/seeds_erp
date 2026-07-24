@@ -8,6 +8,7 @@ import {
   RequireLogisticsAccess,
   RequireInventoryAccess,
   RequireAccountingAccess,
+  RequireFinanceAccess,
 } from "@/features/auth/guards";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { PasswordResetPage } from "@/features/auth/PasswordResetPage";
@@ -30,6 +31,10 @@ import { InvoicesPage } from "@/features/accounting/InvoicesPage";
 import { CustomersPage } from "@/features/accounting/CustomersPage";
 import { RefundsPage } from "@/features/accounting/RefundsPage";
 import { IvaPage } from "@/features/accounting/IvaPage";
+import { EfePage } from "@/features/finance/EfePage";
+import { MovementsPage } from "@/features/finance/MovementsPage";
+import { ImportPage } from "@/features/finance/ImportPage";
+import { AuditPage } from "@/features/finance/AuditPage";
 import { LeadsPage } from "@/features/leads/LeadsPage";
 import { AiPage } from "@/features/ai/AiPage";
 import { AnalyticsPage } from "@/features/analytics/AnalyticsPage";
@@ -85,6 +90,12 @@ export function App() {
                 <Route path="accounting/customers" element={<CustomersPage />} />
                 <Route path="accounting/refunds" element={<RefundsPage />} />
                 <Route path="accounting/iva" element={<IvaPage />} />
+              </Route>
+              <Route element={<RequireFinanceAccess />}>
+                <Route path="finance" element={<EfePage />} />
+                <Route path="finance/movements" element={<MovementsPage />} />
+                <Route path="finance/import" element={<ImportPage />} />
+                <Route path="finance/audit" element={<AuditPage />} />
               </Route>
               <Route element={<RequireAdmin />}>
                 <Route path="sellers" element={<SellersPage />} />

@@ -67,6 +67,7 @@ else
     python manage.py backfill_invoices || true
     python manage.py seed_leads || true
     python manage.py seed_ai_docs || true
+    python manage.py seed_finance || true
   else
     echo "Skipping seeds (SEEDS_BOOTSTRAP_SEEDS=$BOOTSTRAP)"
     python manage.py bootstrap_admin || true

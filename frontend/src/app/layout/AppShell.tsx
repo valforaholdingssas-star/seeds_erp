@@ -25,6 +25,9 @@ import {
   Wallet,
   ClipboardList,
   Shield,
+  Landmark,
+  ArrowLeftRight,
+  Upload,
 } from "lucide-react";
 import { useAuthStore, type UserRole } from "@/features/auth/store";
 import { cn } from "@/lib/utils";
@@ -199,6 +202,44 @@ const navGroups: NavGroup[] = [
         roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
         module: "accounting",
         keywords: ["contacto", "cedula"],
+      },
+    ],
+  },
+  {
+    id: "finanzas",
+    label: "Finanzas",
+    items: [
+      {
+        to: "/finance",
+        label: "Modelo EFE",
+        icon: Landmark,
+        roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
+        module: "finance",
+        keywords: ["modelo", "presupuesto", "tesoreria"],
+      },
+      {
+        to: "/finance/import",
+        label: "Extractos",
+        icon: Upload,
+        roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR"],
+        module: "finance",
+        keywords: ["bancolombia", "csv", "importar", "nequi", "bold"],
+      },
+      {
+        to: "/finance/movements",
+        label: "Clasificación",
+        icon: ArrowLeftRight,
+        roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
+        module: "finance",
+        keywords: ["movimientos", "efe", "puc", "interbancario"],
+      },
+      {
+        to: "/finance/audit",
+        label: "Auditoría ingresos",
+        icon: ChartColumnBig,
+        roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
+        module: "finance",
+        keywords: ["validacion", "bancos", "reportes", "cuadre"],
       },
     ],
   },

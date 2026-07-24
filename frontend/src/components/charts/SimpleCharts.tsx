@@ -150,3 +150,48 @@ export function DonutChart({
     </div>
   );
 }
+
+/** Barras con valores positivos/negativos (auditoría de validación). */
+export function SignedBarChart({
+  series,
+  height = 180,
+}: {
+  series: SeriesPoint[];
+  height?: number;
+}) {
+  const absMax = Math.max(...series.map((s) => Math.abs(s.value)), 1);
+  const barW = Math.max(10, Math.floor(320 / Math.max(series.length, 1)) - 4);
+  const width = Math.max(320, series.length * (barW + 8));
+  const mid = height / 2;
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" role="img">
+      <line x1={0} y1={mid} x2={width} y2={mid} stroke="#D6D3C8" strokeWidth={1} />
+      {series.map((s, i) => {
+        const h = (Math.abs(s.value) / absMax) * (mid - 24);
+        const x = i * (barW + 8) + 6;
+        const y = s.value >= 0 ? mid - h : mid;
+        return (
+          <g key={`${s.label}-${i}`}>
+            <rect
+              x={x}
+              y={y}
+              width={barW}
+              height={Math.max(h, 1)}
+              rx={4}
+              fill={s.color || (s.value >= 0 ? "#62986C" : "#93403A")}
+            />
+            <text
+              x={x + barW / 2}
+              y={height - 8}
+              textAnchor="middle"
+              style={{ fontSize: 9, fill: "#6B7280" }}
+            >
+              {s.label.slice(0, 4)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
