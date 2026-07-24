@@ -151,47 +151,107 @@ export function DonutChart({
   );
 }
 
-/** Barras con valores positivos/negativos (auditoría de validación). */
+/** Barras +/- compactas con monto visible (auditoría de validación). */
 export function SignedBarChart({
   series,
-  height = 180,
+  height = 220,
+  formatValue,
 }: {
   series: SeriesPoint[];
   height?: number;
+  formatValue?: (n: number) => string;
 }) {
+  const fmt =
+    formatValue ||
+    ((n: number) => {
+      const sign = n < 0 ? "-" : "";
+      const abs = Math.abs(n);
+      if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
+      if (abs >= 1_000) return `${sign}$${Math.round(abs / 1_000)}K`;
+      return `${sign}$${Math.round(abs)}`;
+    });
+
   const absMax = Math.max(...series.map((s) => Math.abs(s.value)), 1);
-  const barW = Math.max(10, Math.floor(320 / Math.max(series.length, 1)) - 4);
-  const width = Math.max(320, series.length * (barW + 8));
-  const mid = height / 2;
+  const leftPad = 52;
+  const rightPad = 8;
+  const topPad = 28;
+  const bottomPad = 28;
+  const plotH = height - topPad - bottomPad;
+  const mid = topPad + plotH / 2;
+  const gap = 10;
+  const barW = Math.min(28, Math.max(14, Math.floor(420 / Math.max(series.length, 1)) - gap));
+  const plotW = Math.max(series.length * (barW + gap), 200);
+  const width = leftPad + plotW + rightPad;
+
+  const ticks = [-absMax, -absMax / 2, 0, absMax / 2, absMax];
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" role="img">
-      <line x1={0} y1={mid} x2={width} y2={mid} stroke="#D6D3C8" strokeWidth={1} />
-      {series.map((s, i) => {
-        const h = (Math.abs(s.value) / absMax) * (mid - 24);
-        const x = i * (barW + 8) + 6;
-        const y = s.value >= 0 ? mid - h : mid;
-        return (
-          <g key={`${s.label}-${i}`}>
-            <rect
-              x={x}
-              y={y}
-              width={barW}
-              height={Math.max(h, 1)}
-              rx={4}
-              fill={s.color || (s.value >= 0 ? "#62986C" : "#93403A")}
-            />
-            <text
-              x={x + barW / 2}
-              y={height - 8}
-              textAnchor="middle"
-              style={{ fontSize: 9, fill: "#6B7280" }}
-            >
-              {s.label.slice(0, 4)}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    <div className="w-full overflow-x-auto">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="mx-auto block h-auto max-h-[240px] w-full max-w-3xl"
+        role="img"
+      >
+        {ticks.map((t) => {
+          const y = mid - (t / absMax) * (plotH / 2 - 4);
+          return (
+            <g key={t}>
+              <line
+                x1={leftPad}
+                y1={y}
+                x2={width - rightPad}
+                y2={y}
+                stroke={t === 0 ? "#B8B4A8" : "#E8E4D8"}
+                strokeWidth={t === 0 ? 1.2 : 0.8}
+                strokeDasharray={t === 0 ? undefined : "3 3"}
+              />
+              <text
+                x={leftPad - 6}
+                y={y + 3}
+                textAnchor="end"
+                style={{ fontSize: 9, fill: "#6B7280", fontFamily: "ui-sans-serif, system-ui" }}
+              >
+                {fmt(t)}
+              </text>
+            </g>
+          );
+        })}
+
+        {series.map((s, i) => {
+          const h = (Math.abs(s.value) / absMax) * (plotH / 2 - 8);
+          const x = leftPad + i * (barW + gap) + gap / 2;
+          const y = s.value >= 0 ? mid - h : mid;
+          const labelY = s.value >= 0 ? y - 4 : y + h + 11;
+          const fill = s.color || (s.value >= 0 ? "#62986C" : "#93403A");
+          return (
+            <g key={`${s.label}-${i}`}>
+              <title>{`${s.label}: ${fmt(s.value)}`}</title>
+              <rect x={x} y={y} width={barW} height={Math.max(h, 2)} rx={3} fill={fill} />
+              <text
+                x={x + barW / 2}
+                y={labelY}
+                textAnchor="middle"
+                style={{
+                  fontSize: 8,
+                  fill: "#1D2D1B",
+                  fontWeight: 600,
+                  fontFamily: "ui-sans-serif, system-ui",
+                }}
+              >
+                {fmt(s.value)}
+              </text>
+              <text
+                x={x + barW / 2}
+                y={height - 8}
+                textAnchor="middle"
+                style={{ fontSize: 9, fill: "#6B7280", fontFamily: "ui-sans-serif, system-ui" }}
+              >
+                {s.label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
   );
 }

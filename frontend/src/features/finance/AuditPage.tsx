@@ -6,7 +6,7 @@ import { SignedBarChart } from "@/components/charts/SimpleCharts";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { formatCOP } from "@/lib/utils";
+import { formatCompactCOP, formatCOP } from "@/lib/utils";
 
 type AuditRow = {
   bank: string;
@@ -125,11 +125,28 @@ export function AuditPage() {
       </Card>
 
       <Card>
-        <p className="mb-2 label-caps text-text-muted">
-          Discrepancia diaria · {bank || audit.data?.banks?.[0] || "—"}
-        </p>
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="label-caps text-text-muted">
+              Discrepancia diaria · {bank || audit.data?.banks?.[0] || "—"}
+            </p>
+            <p className="mt-1 text-xs text-text-muted">
+              Arriba (+) = entró más al banco de lo reportado · Abajo (−) = se reportó más de lo que
+              entró
+            </p>
+          </div>
+          <div className="flex gap-3 text-[10px] label-caps text-text-muted">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-sm bg-sage-500" /> Cuadra / bajo
+              tolerancia
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-sm bg-wine-900" /> Fuera de tolerancia
+            </span>
+          </div>
+        </div>
         {chartSeries.length ? (
-          <SignedBarChart series={chartSeries} height={200} />
+          <SignedBarChart series={chartSeries} height={220} formatValue={formatCompactCOP} />
         ) : (
           <p className="text-sm text-text-muted">Sin datos para graficar este mes.</p>
         )}
@@ -189,7 +206,11 @@ export function AuditPage() {
                 <td className="px-2 py-1.5 text-right">{formatCOP(Number(r.reports))}</td>
                 <td className="px-2 py-1.5 text-right">{formatCOP(Number(r.interbank))}</td>
                 <td className="px-2 py-1.5 text-right">{formatCOP(Number(r.banks_net))}</td>
-                <td className="px-2 py-1.5 text-right font-medium">
+                <td
+                  className={`px-2 py-1.5 text-right font-medium tabular-nums ${
+                    r.out_of_tolerance ? "text-wine-900" : "text-green-900"
+                  }`}
+                >
                   {formatCOP(Number(r.validation))}
                 </td>
               </tr>

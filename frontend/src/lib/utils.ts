@@ -12,6 +12,21 @@ export function formatCOP(value: number) {
   }).format(value);
 }
 
+/** Compact money for charts: $1,2M · $45K · $980 */
+export function formatCompactCOP(value: number) {
+  const sign = value < 0 ? "-" : "";
+  const n = Math.abs(value);
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    return `${sign}$${m >= 10 ? m.toFixed(0) : m.toFixed(1).replace(".", ",")}M`;
+  }
+  if (n >= 1_000) {
+    const k = n / 1_000;
+    return `${sign}$${k >= 100 ? k.toFixed(0) : k.toFixed(0)}K`;
+  }
+  return `${sign}$${Math.round(n).toLocaleString("es-CO")}`;
+}
+
 /** Channel sale date (closed_at), Bogotá-friendly medium style. */
 export function formatSaleDate(value: string | null | undefined) {
   if (!value) return "—";
