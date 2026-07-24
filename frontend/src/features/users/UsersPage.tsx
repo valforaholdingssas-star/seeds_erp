@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { apiClient } from "@/lib/apiClient";
 import { DataTable } from "@/components/data/DataTable";
 import { Button } from "@/components/ui/Button";
@@ -235,9 +236,13 @@ export function UsersPage() {
       <PageHeader eyebrow="Parametrización" title="Usuarios y roles" />
 
       <Alert variant="info">
-        Para cambiar el rol o la contraseña de alguien: en la tabla de abajo pulsa{" "}
-        <strong>Rol / contraseña</strong>. Solo visible si entras como ADMIN
-        (menú → Parametrización → Usuarios y roles).
+        Para cambiar el rol o la contraseña de alguien: en la tabla pulsa{" "}
+        <strong>Rol / contraseña</strong>. Para definir qué puede hacer cada rol
+        (y que se aplique a todos): menú →{" "}
+        <Link to="/roles" className="underline underline-offset-2">
+          Roles
+        </Link>
+        .
       </Alert>
 
       <Card>

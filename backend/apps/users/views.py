@@ -19,6 +19,7 @@ from apps.users.serializers import (
     modules_catalog_payload,
     role_choices,
 )
+from apps.users.module_access import load_role_modules, save_role_modules
 
 User = get_user_model()
 
@@ -153,6 +154,44 @@ class ModulesCatalogView(APIView):
 
     def get(self, request):
         return Response(modules_catalog_payload())
+
+
+class RolePermissionsView(APIView):
+    """Configure which modules each role can see. Changes apply to all users of that role
+    (unless the user has a personal modules override)."""
+
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        return Response(modules_catalog_payload())
+
+    def put(self, request):
+        raw = request.data.get("role_defaults") or request.data.get("roles") or request.data
+        if not isinstance(raw, dict):
+            return Response(
+                {"detail": "Envía un objeto role_defaults: { ROL: [módulos...] }."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        saved = save_role_modules(
+            raw,
+            actor=request.user,
+            ip=_client_ip(request),
+        )
+        log_audit_event(
+            actor=request.user,
+            action="ROLE_PERMISSIONS_UPDATED",
+            entity="RolePermissions",
+            entity_id="auth.role_modules",
+            metadata={"roles": list(saved.keys())},
+            ip=_client_ip(request),
+        )
+        return Response(
+            {
+                "detail": "Permisos por rol actualizados. Se aplican a todos los usuarios sin override personal.",
+                "modules": modules_catalog_payload()["modules"],
+                "role_defaults": saved,
+            }
+        )
 
 
 class UserViewSet(viewsets.ModelViewSet):

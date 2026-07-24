@@ -125,11 +125,11 @@ def role_choices() -> list[dict[str, str]]:
 
 
 def modules_catalog_payload() -> dict:
+    from apps.users.module_access import load_role_modules
+
     return {
         "modules": MODULE_CATALOG,
-        "role_defaults": {
-            role: default_modules_for_role(role) for role, _ in Role.choices
-        },
+        "role_defaults": load_role_modules(),
     }
 
 

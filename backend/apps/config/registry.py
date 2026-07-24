@@ -335,6 +335,14 @@ SETTINGS: list[Setting] = [
         default=True,
         help="Si es falso, el despacho falla cuando no hay existencia.",
     ),
+    Setting(
+        key="auth.role_modules",
+        label="Permisos por rol",
+        group="AUTH",
+        type=SettingType.JSON,
+        default=None,
+        help="Mapa rol → módulos. Se edita en Parametrización → Roles.",
+    ),
 ]
 
 SETTINGS_BY_KEY: dict[str, Setting] = {s.key: s for s in SETTINGS}

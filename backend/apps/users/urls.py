@@ -9,6 +9,7 @@ from apps.users.views import (
     PasswordResetConfirmView,
     PasswordResetRequestView,
     RoleChoicesView,
+    RolePermissionsView,
     UserViewSet,
 )
 
@@ -21,6 +22,11 @@ urlpatterns = [
     path("auth/me/", MeView.as_view(), name="auth-me"),
     path("auth/roles/", RoleChoicesView.as_view(), name="auth-roles"),
     path("auth/modules/", ModulesCatalogView.as_view(), name="auth-modules"),
+    path(
+        "auth/role-permissions/",
+        RolePermissionsView.as_view(),
+        name="auth-role-permissions",
+    ),
     path(
         "auth/password-reset/",
         PasswordResetRequestView.as_view(),

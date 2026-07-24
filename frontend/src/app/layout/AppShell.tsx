@@ -24,6 +24,7 @@ import {
   ChevronDown,
   Wallet,
   ClipboardList,
+  Shield,
 } from "lucide-react";
 import { useAuthStore, type UserRole } from "@/features/auth/store";
 import { cn } from "@/lib/utils";
@@ -245,11 +246,19 @@ const navGroups: NavGroup[] = [
       },
       {
         to: "/users",
-        label: "Usuarios y roles",
+        label: "Usuarios",
         icon: Users,
         roles: ["ADMIN"],
         module: "users",
         keywords: ["roles", "permisos", "equipo", "contraseña"],
+      },
+      {
+        to: "/roles",
+        label: "Roles",
+        icon: Shield,
+        roles: ["ADMIN"],
+        module: "roles",
+        keywords: ["permisos", "matriz", "módulos"],
       },
       {
         to: "/geo",

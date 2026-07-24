@@ -13,6 +13,7 @@ import { LoginPage } from "@/features/auth/LoginPage";
 import { PasswordResetPage } from "@/features/auth/PasswordResetPage";
 import { HomePage } from "@/features/home/HomePage";
 import { UsersPage } from "@/features/users/UsersPage";
+import { RolesPage } from "@/features/users/RolesPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { GeoPage } from "@/features/geo/GeoPage";
 import { SellersPage } from "@/features/sellers/SellersPage";
@@ -90,6 +91,7 @@ export function App() {
                 <Route path="payment-methods" element={<PaymentMethodsPage />} />
                 <Route path="pack-rules" element={<PackRulesPage />} />
                 <Route path="users" element={<UsersPage />} />
+                <Route path="roles" element={<RolesPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
             </Route>
