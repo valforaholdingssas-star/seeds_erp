@@ -193,7 +193,7 @@ def generate_label(shipment) -> dict[str, Any]:
                 {
                     "trackingNumber": f"MOCK{shipment.sale.external_id[-8:].upper()}",
                     "trackUrl": (
-                        f"https://tracking.envia.com/"
+                        "https://envia.com/es-CO/tracking?label="
                         f"MOCK{shipment.sale.external_id[-8:].upper()}"
                     ),
                     "label": "https://example.com/label.pdf",

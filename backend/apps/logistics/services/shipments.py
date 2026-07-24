@@ -86,12 +86,19 @@ def _extract_envia_result(body: dict) -> dict:
         or item.get("tracking_url")
         or ""
     )
-    if not track_url and tracking:
-        track_url = f"https://tracking.envia.com/{tracking}"
+    track_url = str(track_url).strip()
+    # Envia docs sometimes return tracking.envia.com/{n} (API 404 for clients).
+    # Public page for CO: https://envia.com/es-CO/tracking?label={n}
+    if tracking and (
+        not track_url
+        or "tracking.envia.com/" in track_url
+        or track_url.rstrip("/").endswith(f"tracking.envia.com/{tracking}")
+    ):
+        track_url = f"https://envia.com/es-CO/tracking?label={tracking}"
     shipment_id = str(item.get("shipmentId") or item.get("id") or "")
     return {
         "tracking_number": tracking,
-        "tracking_url": str(track_url),
+        "tracking_url": track_url,
         "shipping_cost": Decimal(str(cost or 0)),
         "label_url": str(label),
         "envia_shipment_id": shipment_id,
