@@ -2,6 +2,7 @@ from django.urls import path
 
 from apps.analytics.views import (
     AnalyticsOverviewView,
+    HomeOverviewView,
     SalesByChannelView,
     SalesByCityView,
     SalesBySellerView,
@@ -20,4 +21,5 @@ urlpatterns = [
     path("analytics/sales/weekday/", SalesWeekdayView.as_view(), name="analytics-weekday"),
     path("analytics/sales/year-compare/", SalesYearCompareView.as_view(), name="analytics-year"),
     path("analytics/sales/overview/", AnalyticsOverviewView.as_view(), name="analytics-overview"),
+    path("analytics/home/", HomeOverviewView.as_view(), name="analytics-home"),
 ]

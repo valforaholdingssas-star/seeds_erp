@@ -5,6 +5,7 @@ from apps.analytics.services import (
     by_channel,
     by_city,
     by_seller,
+    home_overview,
     sales_summary,
     timeseries,
     weekday_bars,
@@ -91,3 +92,10 @@ class AnalyticsOverviewView(AnalyticsBaseView):
                 ),
             }
         )
+
+
+class HomeOverviewView(AnalyticsBaseView):
+    """Operational KPIs for Inicio."""
+
+    def get(self, request):
+        return Response(home_overview())

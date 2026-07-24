@@ -416,3 +416,60 @@ def year_comparison(
             for m in range(1, 13)
         ],
     }
+
+
+def home_overview() -> dict[str, Any]:
+    """Operational KPIs for the home screen (Bogotá calendar day)."""
+    from apps.integrations.models import RawEventStatus, RawWebhookEvent
+    from apps.logistics.models import Shipment, ShipmentStatus
+
+    today = timezone.localdate()
+    yesterday = today - timedelta(days=1)
+
+    def _day_sales(day: date) -> dict[str, Any]:
+        agg = _base_qs(date_from=day, date_to=day).aggregate(
+            total=Sum("total_value"), orders=Count("id")
+        )
+        return {
+            "date": day.isoformat(),
+            "sales": _money(agg["total"]),
+            "orders": int(agg["orders"] or 0),
+        }
+
+    pending_statuses = [
+        ShipmentStatus.POR_GENERAR,
+        ShipmentStatus.LISTO_PARA_ENVIAR,
+    ]
+    by_status = {
+        row["status"]: int(row["c"])
+        for row in (
+            Shipment.objects.filter(status__in=pending_statuses)
+            .values("status")
+            .annotate(c=Count("id"))
+        )
+    }
+    to_prepare = by_status.get(ShipmentStatus.POR_GENERAR, 0)
+    to_ship = by_status.get(ShipmentStatus.LISTO_PARA_ENVIAR, 0)
+
+    start, end = _aware_range(yesterday, today)
+    failed_events = RawWebhookEvent.objects.filter(
+        status=RawEventStatus.FAILED,
+        received_at__gte=start,
+        received_at__lte=end,
+    ).count()
+
+    return {
+        "as_of": today.isoformat(),
+        "pending_shipments": {
+            "total": to_prepare + to_ship,
+            "to_prepare": to_prepare,
+            "to_ship": to_ship,
+        },
+        "failed_events": {
+            "count": failed_events,
+            "from": yesterday.isoformat(),
+            "to": today.isoformat(),
+        },
+        "sales_today": _day_sales(today),
+        "sales_yesterday": _day_sales(yesterday),
+    }
