@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -29,6 +29,7 @@ import {
   ArrowLeftRight,
   Upload,
 } from "lucide-react";
+import { fetchMe } from "@/features/auth/api";
 import { useAuthStore, type UserRole } from "@/features/auth/store";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
@@ -485,9 +486,27 @@ function SidebarNav({
 
 export function AppShell() {
   const user = useAuthStore((s) => s.user);
+  const access = useAuthStore((s) => s.access);
+  const setUser = useAuthStore((s) => s.setUser);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!access) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const me = await fetchMe();
+        if (!cancelled) setUser(me);
+      } catch {
+        // keep cached session; 401 interceptor handles logout
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [access, setUser]);
 
   const aside = (
     <aside className="seeds-panel-dark flex h-full w-[260px] shrink-0 flex-col text-text-on-dark">
