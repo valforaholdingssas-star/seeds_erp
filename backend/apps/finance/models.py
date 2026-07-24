@@ -133,6 +133,8 @@ class BankImportBatch(BaseModel):
     rows_created = models.PositiveIntegerField(default=0)
     rows_duplicated = models.PositiveIntegerField(default=0)
     rows_errors = models.PositiveIntegerField(default=0)
+    date_from = models.DateField(null=True, blank=True)
+    date_to = models.DateField(null=True, blank=True)
     dry_run = models.BooleanField(default=False)
     errors = models.JSONField(default=list, blank=True)
     created_by = models.ForeignKey(

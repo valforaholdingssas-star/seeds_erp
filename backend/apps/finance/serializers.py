@@ -49,6 +49,9 @@ class AccountingAccountSerializer(serializers.ModelSerializer):
 
 
 class BankSerializer(serializers.ModelSerializer):
+    last_import = serializers.SerializerMethodField()
+    coverage = serializers.SerializerMethodField()
+
     class Meta:
         model = Bank
         fields = [
@@ -59,8 +62,40 @@ class BankSerializer(serializers.ModelSerializer):
             "importer",
             "active",
             "report_aliases",
+            "last_import",
+            "coverage",
             "created_at",
             "updated_at",
+        ]
+
+    def get_last_import(self, obj) -> dict | None:
+        cache = self.context.get("last_imports") or {}
+        return cache.get(str(obj.id))
+
+    def get_coverage(self, obj) -> dict | None:
+        cache = self.context.get("coverages") or {}
+        return cache.get(str(obj.id))
+
+
+class BankImportBatchSerializer(serializers.ModelSerializer):
+    bank_name = serializers.CharField(source="bank.name", read_only=True)
+
+    class Meta:
+        model = BankImportBatch
+        fields = [
+            "id",
+            "bank",
+            "bank_name",
+            "filename",
+            "rows_total",
+            "rows_created",
+            "rows_duplicated",
+            "rows_errors",
+            "date_from",
+            "date_to",
+            "dry_run",
+            "errors",
+            "created_at",
         ]
 
 
@@ -141,26 +176,6 @@ class BankMovementSerializer(serializers.ModelSerializer):
             "import_batch",
             "created_at",
             "updated_at",
-        ]
-
-
-class BankImportBatchSerializer(serializers.ModelSerializer):
-    bank_name = serializers.CharField(source="bank.name", read_only=True)
-
-    class Meta:
-        model = BankImportBatch
-        fields = [
-            "id",
-            "bank",
-            "bank_name",
-            "filename",
-            "rows_total",
-            "rows_created",
-            "rows_duplicated",
-            "rows_errors",
-            "dry_run",
-            "errors",
-            "created_at",
         ]
 
 

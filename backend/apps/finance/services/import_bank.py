@@ -37,6 +37,9 @@ def import_bank_csv(
     )
     to_create = [(r, h) for r, h in valid if h not in existing]
     duplicated = len(valid) - len(to_create)
+    dates = [r.date for r, _ in valid]
+    date_from = min(dates) if dates else None
+    date_to = max(dates) if dates else None
 
     preview = [
         {
@@ -62,6 +65,8 @@ def import_bank_csv(
                 rows_created=0,
                 rows_duplicated=duplicated,
                 rows_errors=len(errors),
+                date_from=date_from,
+                date_to=date_to,
                 dry_run=False,
                 errors=errors[:100],
                 created_by=actor if getattr(actor, "is_authenticated", False) else None,
@@ -97,6 +102,8 @@ def import_bank_csv(
                     "created": batch.rows_created,
                     "duplicated": duplicated,
                     "errors": len(errors),
+                    "date_from": date_from.isoformat() if date_from else None,
+                    "date_to": date_to.isoformat() if date_to else None,
                 },
             )
     else:
@@ -107,6 +114,8 @@ def import_bank_csv(
             rows_created=0,
             rows_duplicated=duplicated,
             rows_errors=len(errors),
+            date_from=date_from,
+            date_to=date_to,
             dry_run=True,
             errors=errors[:100],
             created_by=actor if getattr(actor, "is_authenticated", False) else None,
@@ -116,6 +125,8 @@ def import_bank_csv(
         "batch_id": str(batch.id) if batch else None,
         "dry_run": dry_run,
         "bank": bank.name,
+        "date_from": date_from.isoformat() if date_from else None,
+        "date_to": date_to.isoformat() if date_to else None,
         "rows_total": len(parsed),
         "rows_valid": len(valid),
         "rows_new": len(to_create),

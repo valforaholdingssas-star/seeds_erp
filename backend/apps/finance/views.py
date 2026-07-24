@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.db.models import Count, Max, Min
 from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -61,6 +62,56 @@ class BankViewSet(viewsets.ModelViewSet):
     filterset_fields = ["active", "kind", "importer", "name"]
     search_fields = ["name", "account_no"]
     ordering_fields = ["name"]
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        banks = list(self.filter_queryset(self.get_queryset()))
+        bank_ids = [b.id for b in banks]
+        last_imports: dict[str, dict] = {}
+        coverages: dict[str, dict] = {}
+        if bank_ids:
+            for bank_id in bank_ids:
+                batch = (
+                    BankImportBatch.objects.filter(bank_id=bank_id, dry_run=False)
+                    .order_by("-created_at")
+                    .first()
+                )
+                if not batch:
+                    continue
+                date_from, date_to = batch.date_from, batch.date_to
+                if date_from is None or date_to is None:
+                    agg = batch.movements.aggregate(dmin=Min("date"), dmax=Max("date"))
+                    date_from = date_from or agg["dmin"]
+                    date_to = date_to or agg["dmax"]
+                last_imports[str(bank_id)] = {
+                    "batch_id": str(batch.id),
+                    "uploaded_at": batch.created_at.isoformat(),
+                    "filename": batch.filename,
+                    "date_from": date_from.isoformat() if date_from else None,
+                    "date_to": date_to.isoformat() if date_to else None,
+                    "rows_created": batch.rows_created,
+                    "rows_duplicated": batch.rows_duplicated,
+                    "rows_total": batch.rows_total,
+                }
+
+            cov_rows = (
+                BankMovement.objects.filter(bank_id__in=bank_ids)
+                .values("bank_id")
+                .annotate(
+                    date_from=Min("date"),
+                    date_to=Max("date"),
+                    movements=Count("id"),
+                )
+            )
+            for row in cov_rows:
+                coverages[str(row["bank_id"])] = {
+                    "date_from": row["date_from"].isoformat() if row["date_from"] else None,
+                    "date_to": row["date_to"].isoformat() if row["date_to"] else None,
+                    "movements": row["movements"],
+                }
+        ctx["last_imports"] = last_imports
+        ctx["coverages"] = coverages
+        return ctx
 
 
 class ClassificationRuleViewSet(viewsets.ModelViewSet):
