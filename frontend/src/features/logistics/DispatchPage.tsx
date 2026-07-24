@@ -9,12 +9,21 @@ import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { cn } from "@/lib/utils";
 
+type PackLine = {
+  color: string;
+  tipo: string;
+  tipo_label: string;
+  quantity: number;
+  product_name: string;
+};
+
 type DispatchRow = {
   id: string;
   tracking_number: string;
   sale_external_id: string;
   qty_dorados: number;
   qty_plateados: number;
+  pack_lines: PackLine[];
   status: string;
   sent_at: string | null;
 };
@@ -244,6 +253,37 @@ export function DispatchPage() {
       { accessorKey: "tracking_number", header: "Guía" },
       { accessorKey: "sale_external_id", header: "Pedido" },
       {
+        id: "tipo",
+        header: "Tipo de producto",
+        cell: ({ row }) => {
+          const lines = row.original.pack_lines || [];
+          if (!lines.length) {
+            return <span className="text-text-soft">—</span>;
+          }
+          return (
+            <div className="min-w-[160px] space-y-1">
+              {lines.map((line, idx) => {
+                const colorLabel =
+                  line.color === "DORADO"
+                    ? "Dorado"
+                    : line.color === "PLATEADO"
+                      ? "Plateado"
+                      : line.color || "";
+                return (
+                  <p key={`${line.tipo}-${line.color}-${idx}`} className="text-xs leading-snug text-green-900">
+                    <span className="font-medium">{line.tipo_label}</span>
+                    {colorLabel ? (
+                      <span className="text-text-muted"> · {colorLabel}</span>
+                    ) : null}
+                    <span className="text-text-soft"> ×{line.quantity}</span>
+                  </p>
+                );
+              })}
+            </div>
+          );
+        },
+      },
+      {
         accessorKey: "qty_dorados",
         header: "Dorados",
         cell: ({ getValue }) => <Badge variant="sage">{String(getValue())}</Badge>,
@@ -252,12 +292,6 @@ export function DispatchPage() {
         accessorKey: "qty_plateados",
         header: "Plateados",
         cell: ({ getValue }) => <Badge variant="dark">{String(getValue())}</Badge>,
-      },
-      {
-        id: "pack",
-        header: "Empaque",
-        cell: ({ row }) =>
-          `${row.original.qty_dorados} D + ${row.original.qty_plateados} P`,
       },
     ],
     [tab],

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.logistics.models import BatchJob, BatchJobItem, Shipment
+from apps.sales.kit_types import kit_type_label
 
 
 class ShipmentSerializer(serializers.ModelSerializer):
@@ -10,6 +11,7 @@ class ShipmentSerializer(serializers.ModelSerializer):
     city_raw = serializers.CharField(source="sale.city_raw", read_only=True)
     qty_dorados = serializers.SerializerMethodField()
     qty_plateados = serializers.SerializerMethodField()
+    pack_lines = serializers.SerializerMethodField()
     geo_city_name = serializers.CharField(source="geo_city.municipality", read_only=True)
     geo_city_code = serializers.CharField(source="geo_city.municipality_code", read_only=True)
 
@@ -47,6 +49,7 @@ class ShipmentSerializer(serializers.ModelSerializer):
             "sent_at",
             "qty_dorados",
             "qty_plateados",
+            "pack_lines",
             "created_at",
             "updated_at",
         ]
@@ -81,6 +84,24 @@ class ShipmentSerializer(serializers.ModelSerializer):
         return sum(
             i.quantity for i in obj.sale.items.all() if i.color == "PLATEADO"
         )
+
+    def get_pack_lines(self, obj) -> list[dict]:
+        lines = []
+        for item in obj.sale.items.all():
+            if not item.quantity:
+                continue
+            tipo = item.tipo or ""
+            label = kit_type_label(tipo) or (item.product_name or "").strip() or tipo or "Producto"
+            lines.append(
+                {
+                    "color": item.color or "",
+                    "tipo": tipo,
+                    "tipo_label": label,
+                    "quantity": item.quantity,
+                    "product_name": item.product_name or "",
+                }
+            )
+        return lines
 
 
 class ShipmentMirrorUpdateSerializer(serializers.ModelSerializer):
