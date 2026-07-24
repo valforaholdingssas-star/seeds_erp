@@ -48,35 +48,139 @@ def _dec(raw: str) -> Decimal:
     return Decimal(s)
 
 
+def _parse_date(raw: str) -> date:
+    s = (raw or "").strip().strip('"').strip("'").strip()
+    if not s:
+        raise ValueError("fecha vacía")
+    # solo dígitos: DDMMYYYY o YYYYMMDD
+    if len(s) >= 8 and s[:8].isdigit():
+        eight = s[:8]
+        for fmt in ("%d%m%Y", "%Y%m%d"):
+            try:
+                return datetime.strptime(eight, fmt).date()
+            except ValueError:
+                continue
+    # quitar hora si viene pegada
+    head = s.replace("T", " ").split(" ")[0]
+    for fmt in (
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+        "%d.%m.%Y",
+        "%m/%d/%Y",
+    ):
+        try:
+            return datetime.strptime(head[:10], fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"fecha no reconocida: {raw[:40]!r}")
+
+
+def _split_csv_line(line: str) -> list[str]:
+    # Delimitador dominante; respeta comillas simples de CSV
+    if line.count(";") >= line.count(",") and line.count(";") >= 2:
+        delim = ";"
+    elif line.count("\t") >= 2:
+        delim = "\t"
+    else:
+        delim = ","
+    parts: list[str] = []
+    cur = []
+    in_q = False
+    for ch in line:
+        if ch == '"':
+            in_q = not in_q
+            continue
+        if ch == delim and not in_q:
+            parts.append("".join(cur).strip())
+            cur = []
+            continue
+        cur.append(ch)
+    parts.append("".join(cur).strip())
+    return parts
+
+
+def _looks_like_header(parts: list[str]) -> bool:
+    blob = " ".join(parts).upper()
+    return any(
+        k in blob
+        for k in ("FECHA", "DATE", "DESCRIP", "CONCEPTO", "VALOR", "MONTO", "REFEREN")
+    )
+
+
 def parse_bancolombia(text: str) -> list[ParsedRow]:
     """
-    CSV sin encabezado (formato plano Bancolombia):
-      col1 cuenta, col4 fecha DDMMYYYY, col6 valor con signo, col7 código, col8 concepto
+    Soporta:
+    1) Plano sin encabezado (legado): col1 cuenta, col4 fecha DDMMYYYY,
+       col6 valor, col7 código, col8 concepto
+    2) CSV con encabezado (extracto web reciente): Fecha / Valor / Descripción…
     """
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return []
+
+    first_parts = _split_csv_line(lines[0])
+    if _looks_like_header(first_parts):
+        return _parse_headered(
+            text,
+            date_keys=(
+                "FECHA CONTABLE",
+                "FECHA TRANSACCION",
+                "FECHA TRANSACCIÓN",
+                "FECHA",
+                "DATE",
+            ),
+            value_keys=("VALOR", "MONTO", "AMOUNT", "VALOR COP"),
+            concept_keys=("DESCRIPCION", "DESCRIPCIÓN", "CONCEPTO", "DETALLE", "DESCRIPTION"),
+            ref_keys=("REFERENCIA", "DOCUMENTO", "SUCURSAL", "OFICINA", "REFERENCE"),
+        )
+
     rows: list[ParsedRow] = []
-    for i, line in enumerate(text.splitlines(), start=1):
-        line = line.strip()
-        if not line:
-            continue
-        # try semicolon, then comma, then tab
-        parts = line.split(";")
+    for i, line in enumerate(lines, start=1):
+        parts = _split_csv_line(line)
         if len(parts) < 6:
-            parts = line.split(",")
-        if len(parts) < 6:
-            parts = line.split("\t")
-        if len(parts) < 6:
-            rows.append(ParsedRow(date=date.today(), value=Decimal("0"), concept="", error=f"L{i}: columnas insuficientes"))
+            rows.append(
+                ParsedRow(
+                    date=date.today(),
+                    value=Decimal("0"),
+                    concept="",
+                    error=f"L{i}: columnas insuficientes ({len(parts)}) · {line[:80]!r}",
+                )
+            )
             continue
         try:
-            account = (parts[0] or "").strip()
-            fecha_raw = (parts[3] or "").strip()
-            if len(fecha_raw) == 8 and fecha_raw.isdigit():
-                d = datetime.strptime(fecha_raw, "%d%m%Y").date()
-            else:
-                d = datetime.strptime(fecha_raw[:10], "%Y-%m-%d").date()
+            account = parts[0]
+            # Prefer col4 (índice 3); si no parsea, prueba col1/col5 (formatos raros)
+            fecha_raw = parts[3]
+            try:
+                d = _parse_date(fecha_raw)
+            except ValueError:
+                d = None
+                for idx in (0, 1, 2, 4):
+                    if idx < len(parts):
+                        try:
+                            d = _parse_date(parts[idx])
+                            fecha_raw = parts[idx]
+                            break
+                        except ValueError:
+                            continue
+                if d is None:
+                    raise ValueError(f"fecha no reconocida: {parts[3]!r}")
             valor = _dec(parts[5])
-            tx = (parts[6] if len(parts) > 6 else "").strip()
-            concept = (parts[7] if len(parts) > 7 else "").strip()
+            # a veces valor está en otra columna si el layout cambió
+            if valor == 0 and len(parts) > 6:
+                for idx in (4, 6, 5):
+                    if idx < len(parts):
+                        try:
+                            cand = _dec(parts[idx])
+                            if cand != 0:
+                                valor = cand
+                                break
+                        except Exception:
+                            continue
+            tx = parts[6] if len(parts) > 6 else ""
+            concept = parts[7] if len(parts) > 7 else (parts[6] if len(parts) > 6 else "")
             rows.append(
                 ParsedRow(
                     date=d,
@@ -84,7 +188,7 @@ def parse_bancolombia(text: str) -> list[ParsedRow]:
                     concept=concept,
                     tx_code=tx,
                     account_no=account,
-                    raw={"line": i, "parts": parts[:9]},
+                    raw={"line": i, "fecha_raw": fecha_raw, "parts": parts[:9]},
                 )
             )
         except (ValueError, InvalidOperation, IndexError) as exc:
@@ -141,8 +245,8 @@ def _parse_headered(
     lines = [ln for ln in text.splitlines() if ln.strip()]
     if not lines:
         return []
-    delim = ";" if lines[0].count(";") >= lines[0].count(",") else ","
-    header = [h.strip().strip('"').upper() for h in lines[0].split(delim)]
+    header_parts = _split_csv_line(lines[0])
+    header = [h.strip().strip('"').upper() for h in header_parts]
     idx = {h: i for i, h in enumerate(header)}
 
     def find(keys: tuple[str, ...]) -> int | None:
@@ -158,31 +262,35 @@ def _parse_headered(
     di, vi, ci, ri = find(date_keys), find(value_keys), find(concept_keys), find(ref_keys)
     rows: list[ParsedRow] = []
     for n, line in enumerate(lines[1:], start=2):
-        parts = [p.strip().strip('"') for p in line.split(delim)]
+        parts = _split_csv_line(line)
         try:
             if di is None or vi is None:
-                raise ValueError("faltan columnas fecha/valor")
-            raw_d = parts[di]
-            if len(raw_d) == 8 and raw_d.isdigit():
-                d = datetime.strptime(raw_d, "%d%m%Y").date()
-            elif "/" in raw_d:
-                for fmt in ("%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d"):
-                    try:
-                        d = datetime.strptime(raw_d[:10], fmt).date()
-                        break
-                    except ValueError:
-                        continue
-                else:
-                    raise ValueError(f"fecha {raw_d}")
-            else:
-                d = datetime.strptime(raw_d[:10], "%Y-%m-%d").date()
+                raise ValueError(
+                    f"faltan columnas fecha/valor · headers={header[:8]}"
+                )
+            if di >= len(parts) or vi >= len(parts):
+                raise ValueError("fila más corta que el encabezado")
+            d = _parse_date(parts[di])
             valor = _dec(parts[vi])
             concept = parts[ci] if ci is not None and ci < len(parts) else ""
             ref = parts[ri] if ri is not None and ri < len(parts) else ""
-            rows.append(ParsedRow(date=d, value=valor, concept=concept, reference=ref, raw={"line": n}))
+            rows.append(
+                ParsedRow(
+                    date=d,
+                    value=valor,
+                    concept=concept,
+                    reference=ref,
+                    raw={"line": n},
+                )
+            )
         except Exception as exc:
             rows.append(
-                ParsedRow(date=date.today(), value=Decimal("0"), concept="", error=f"L{n}: {exc}")
+                ParsedRow(
+                    date=date.today(),
+                    value=Decimal("0"),
+                    concept="",
+                    error=f"L{n}: {exc}",
+                )
             )
     return rows
 
