@@ -6,7 +6,7 @@ from apps.config import settings_service as cfg
 from apps.config.models import SettingAudit
 from apps.config.registry import GROUPS
 from apps.config.serializers import SettingPatchSerializer
-from apps.users.permissions import IsAdmin
+from apps.users.permissions import IsModuleRole
 
 
 def _client_ip(request) -> str | None:
@@ -17,7 +17,8 @@ def _client_ip(request) -> str | None:
 
 
 class ConfigListView(APIView):
-    permission_classes = [IsAdmin]
+    permission_module = "settings"
+    permission_classes = [IsModuleRole]
 
     def get(self, request):
         return Response(
@@ -43,7 +44,8 @@ class ConfigListView(APIView):
 
 
 class ConfigGroupView(APIView):
-    permission_classes = [IsAdmin]
+    permission_module = "settings"
+    permission_classes = [IsModuleRole]
 
     def get(self, request, group: str):
         return Response(
@@ -57,7 +59,9 @@ class ConfigGroupView(APIView):
 class ConfigTestView(APIView):
     """Live provider ping when credentials exist; mock-aware messages otherwise."""
 
-    permission_classes = [IsAdmin]
+    permission_module = "settings"
+    permission_crud = "u"
+    permission_classes = [IsModuleRole]
 
     def post(self, request, group: str):
         group = group.upper()
@@ -109,7 +113,8 @@ class ConfigTestView(APIView):
 
 
 class ConfigAuditView(APIView):
-    permission_classes = [IsAdmin]
+    permission_module = "settings"
+    permission_classes = [IsModuleRole]
 
     def get(self, request):
         qs = SettingAudit.objects.select_related("actor").all()[:100]

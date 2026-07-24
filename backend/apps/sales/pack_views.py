@@ -2,7 +2,7 @@ from rest_framework import serializers, viewsets
 
 from apps.audit.services import log_audit_event
 from apps.sales.models import ProductPackRule
-from apps.users.permissions import IsAdmin, IsModuleRole
+from apps.users.permissions import IsModuleRole
 
 
 class ProductPackRuleSerializer(serializers.ModelSerializer):
@@ -33,6 +33,7 @@ class ProductPackRuleSerializer(serializers.ModelSerializer):
 
 
 class ProductPackRuleViewSet(viewsets.ModelViewSet):
+    permission_module = "pack_rules"
     queryset = ProductPackRule.objects.all()
     serializer_class = ProductPackRuleSerializer
     filterset_fields = ["active", "woo_product_id"]
@@ -40,10 +41,7 @@ class ProductPackRuleViewSet(viewsets.ModelViewSet):
     ordering_fields = ["woo_product_id", "multiplier", "created_at"]
 
     def get_permissions(self):
-        if self.action in {"list", "retrieve"}:
-            self.module_roles = ["VENTAS", "LOGISTICA", "SUPERVISOR", "VIEWER"]
-            return [IsModuleRole()]
-        return [IsAdmin()]
+        return [IsModuleRole()]
 
     def perform_create(self, serializer):
         rule = serializer.save()

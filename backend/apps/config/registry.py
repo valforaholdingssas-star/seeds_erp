@@ -337,11 +337,19 @@ SETTINGS: list[Setting] = [
     ),
     Setting(
         key="auth.role_modules",
-        label="Permisos por rol",
+        label="Módulos por rol (legacy)",
         group="AUTH",
         type=SettingType.JSON,
         default=None,
-        help="Mapa rol → módulos. Se edita en Parametrización → Roles.",
+        help="Lista de módulos por rol. Preferir auth.role_permissions (CRUD).",
+    ),
+    Setting(
+        key="auth.role_permissions",
+        label="Permisos CRUD por rol",
+        group="AUTH",
+        type=SettingType.JSON,
+        default=None,
+        help="Mapa rol → módulo → {c,r,u,d}. Editable en Parametrización → Roles.",
     ),
 ]
 

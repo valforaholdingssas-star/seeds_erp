@@ -4,18 +4,19 @@ from rest_framework.response import Response
 
 from apps.integrations.models import RawEventStatus, RawWebhookEvent
 from apps.integrations.serializers import RawWebhookEventSerializer
-from apps.users.permissions import IsAdmin, IsAdminOrSupervisor
+from apps.users.permissions import IsModuleRole
 
 
 class RawWebhookEventViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_module = "integrations"
     queryset = RawWebhookEvent.objects.all()
     serializer_class = RawWebhookEventSerializer
-    permission_classes = [IsAdminOrSupervisor]
+    permission_classes = [IsModuleRole]
     filterset_fields = ["source", "status", "event_type"]
     search_fields = ["dedupe_key", "error", "event_type"]
     ordering_fields = ["received_at", "status", "attempts"]
 
-    @action(detail=True, methods=["post"], permission_classes=[IsAdmin])
+    @action(detail=True, methods=["post"])
     def reprocess(self, request, pk=None):
         event = self.get_object()
         event.status = RawEventStatus.RECEIVED

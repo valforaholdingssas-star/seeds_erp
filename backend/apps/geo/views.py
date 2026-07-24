@@ -5,13 +5,14 @@ from rest_framework.response import Response
 from apps.geo.models import GeoCatalog
 from apps.geo.serializers import GeoCatalogSerializer
 from apps.geo.services import resolve_city
-from apps.users.permissions import IsAdminOrSupervisor
+from apps.users.permissions import IsModuleRole
 
 
 class GeoCatalogViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_module = "geo"
     queryset = GeoCatalog.objects.all()
     serializer_class = GeoCatalogSerializer
-    permission_classes = [IsAdminOrSupervisor]
+    permission_classes = [IsModuleRole]
     filterset_fields = ["department_iso", "municipality_code", "department"]
     search_fields = ["municipality", "department", "municipality_code", "search"]
     ordering_fields = ["municipality", "department", "municipality_code"]

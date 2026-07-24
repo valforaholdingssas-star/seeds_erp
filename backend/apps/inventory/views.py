@@ -16,6 +16,7 @@ from apps.users.permissions import IsModuleRole
 
 
 class ProductViewSet(viewsets.ModelViewSet):
+    permission_module = "inventory"
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     filterset_fields = ["active", "color", "tipo", "is_generic", "sku"]
@@ -47,6 +48,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 
 class MaterialViewSet(viewsets.ModelViewSet):
+    permission_module = "inventory"
     queryset = Material.objects.all()
     serializer_class = MaterialSerializer
     filterset_fields = ["active", "sku"]
@@ -67,6 +69,7 @@ class MaterialViewSet(viewsets.ModelViewSet):
 
 
 class KardexViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_module = "inventory"
     queryset = KardexEntry.objects.select_related("product", "material", "created_by").all()
     serializer_class = KardexEntrySerializer
     filterset_fields = ["item_type", "movement", "reason", "product", "material", "ref_type", "ref_id"]
@@ -79,6 +82,7 @@ class KardexViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ManualEntryView(APIView):
+    permission_module = "inventory"
     module_roles = ["LOGISTICA"]
     permission_classes = [IsModuleRole]
 

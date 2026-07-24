@@ -6,7 +6,7 @@ from apps.audit.services import log_audit_event
 from apps.sellers.models import Vendedor
 from apps.sellers.serializers import VendedorSerializer
 from apps.sellers.services import ensure_system_vendors, resolve_vendedor
-from apps.users.permissions import IsAdmin, IsModuleRole
+from apps.users.permissions import IsModuleRole
 
 
 def _client_ip(request) -> str | None:
@@ -17,6 +17,7 @@ def _client_ip(request) -> str | None:
 
 
 class VendedorViewSet(viewsets.ModelViewSet):
+    permission_module = "sellers"
     queryset = Vendedor.objects.select_related("user").all()
     serializer_class = VendedorSerializer
     filterset_fields = ["active", "is_system", "needs_review", "name"]
@@ -24,10 +25,7 @@ class VendedorViewSet(viewsets.ModelViewSet):
     ordering_fields = ["name", "created_at", "active", "needs_review"]
 
     def get_permissions(self):
-        if self.action in {"list", "retrieve", "resolve"}:
-            self.module_roles = ["VENTAS", "LOGISTICA", "CONTABILIDAD", "SUPERVISOR", "VIEWER"]
-            return [IsModuleRole()]
-        return [IsAdmin()]
+        return [IsModuleRole()]
 
     def perform_create(self, serializer):
         vendor = serializer.save()

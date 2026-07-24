@@ -40,6 +40,7 @@ def _client_ip(request) -> str | None:
 
 
 class ConsolidatedSaleViewSet(viewsets.ModelViewSet):
+    permission_module = "sales"
     queryset = ConsolidatedSale.objects.select_related(
         "seller", "shipment", "invoice", "payment_method"
     ).prefetch_related("items")
@@ -209,6 +210,7 @@ class ConsolidatedSaleViewSet(viewsets.ModelViewSet):
 
 
 class FeriaSaleCreateView(APIView):
+    permission_module = "sales"
     module_roles = ["VENTAS"]
     permission_classes = [IsModuleRole]
 
@@ -226,6 +228,7 @@ class FeriaSaleCreateView(APIView):
 
 
 class ManualSaleCreateView(APIView):
+    permission_module = "sales"
     module_roles = ["VENTAS"]
     permission_classes = [IsModuleRole]
 
@@ -274,6 +277,8 @@ class WooCommerceWebhookView(APIView):
 class EcommerceResyncView(APIView):
     """Reconcile WooCommerce orders in a date range → BatchJob WOO_RESYNC."""
 
+    permission_module = "sales"
+    permission_crud = "u"
     module_roles = ["VENTAS", "SUPERVISOR"]
     permission_classes = [IsModuleRole]
 

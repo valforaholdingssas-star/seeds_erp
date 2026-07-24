@@ -10,6 +10,7 @@ from apps.users.permissions import IsAdmin, IsModuleRole
 
 
 class DocumentViewSet(viewsets.ModelViewSet):
+    permission_module = "ai"
     queryset = Document.objects.all()
     serializer_class = DocumentSerializer
     filterset_fields = ["kind", "ref_type", "ref_id"]
@@ -55,6 +56,8 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
 
 class AgentAskView(APIView):
+    permission_module = "ai"
+    permission_crud = "r"
     def get_permissions(self):
         self.module_roles = ["VENTAS", "LOGISTICA", "CONTABILIDAD", "SUPERVISOR", "VIEWER"]
         return [IsModuleRole()]

@@ -28,6 +28,7 @@ from apps.users.permissions import IsModuleRole
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
+    permission_module = "accounting"
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
     filterset_fields = ["id_type", "id_number", "alegra_synced", "city"]
@@ -48,6 +49,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
 
 class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_module = "accounting"
     queryset = Invoice.objects.select_related("sale", "customer").all()
     serializer_class = InvoiceSerializer
     filterset_fields = ["status", "customer", "number", "idempotency_key"]
@@ -101,6 +103,7 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class RefundViewSet(viewsets.ModelViewSet):
+    permission_module = "accounting"
     queryset = Refund.objects.select_related("invoice", "sale", "created_by").all()
     serializer_class = RefundSerializer
     http_method_names = ["get", "post", "head", "options"]
@@ -134,6 +137,7 @@ class RefundViewSet(viewsets.ModelViewSet):
 
 
 class IvaSummaryView(APIView):
+    permission_module = "accounting"
     module_roles = ["CONTABILIDAD", "SUPERVISOR", "VIEWER", "ADMIN"]
     permission_classes = [IsModuleRole]
 

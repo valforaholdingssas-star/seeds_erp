@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from apps.audit.services import log_audit_event
 from apps.sales.models import PaymentMethod
 from apps.sales.services.payment_methods import apply_payment_method_name, ensure_default_payment_methods
-from apps.users.permissions import IsAdmin, IsModuleRole
+from apps.users.permissions import IsModuleRole
 
 
 class PaymentMethodSerializer(serializers.ModelSerializer):
@@ -23,6 +23,7 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
 
 
 class PaymentMethodViewSet(viewsets.ModelViewSet):
+    permission_module = "payment_methods"
     queryset = PaymentMethod.objects.all()
     serializer_class = PaymentMethodSerializer
     filterset_fields = ["active", "is_system", "name"]
@@ -30,10 +31,7 @@ class PaymentMethodViewSet(viewsets.ModelViewSet):
     ordering_fields = ["name", "created_at", "active"]
 
     def get_permissions(self):
-        if self.action in {"list", "retrieve"}:
-            self.module_roles = ["VENTAS", "LOGISTICA", "CONTABILIDAD", "SUPERVISOR", "VIEWER"]
-            return [IsModuleRole()]
-        return [IsAdmin()]
+        return [IsModuleRole()]
 
     def get_queryset(self):
         qs = super().get_queryset()

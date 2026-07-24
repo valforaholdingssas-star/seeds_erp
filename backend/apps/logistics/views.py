@@ -41,6 +41,7 @@ def _client_ip(request) -> str | None:
 
 
 class ShipmentViewSet(viewsets.ModelViewSet):
+    permission_module = "logistics"
     queryset = (
         Shipment.objects.select_related("sale", "geo_city")
         .prefetch_related("sale__items")
@@ -197,6 +198,7 @@ class ShipmentViewSet(viewsets.ModelViewSet):
 
 
 class BatchJobViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_module = "logistics"
     queryset = BatchJob.objects.prefetch_related("items").all()
     serializer_class = BatchJobSerializer
 
@@ -206,6 +208,7 @@ class BatchJobViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class DispatchListView(APIView):
+    permission_module = "dispatch"
     module_roles = ["LOGISTICA", "SUPERVISOR", "VIEWER"]
     permission_classes = [IsModuleRole]
 
@@ -223,6 +226,7 @@ class DispatchListView(APIView):
 class DispatchPackSummaryView(APIView):
     """Vista de empaque: cuántos pedidos y unidades por producto (cajas)."""
 
+    permission_module = "dispatch"
     module_roles = ["LOGISTICA", "SUPERVISOR", "VIEWER"]
     permission_classes = [IsModuleRole]
 
@@ -232,6 +236,8 @@ class DispatchPackSummaryView(APIView):
 
 
 class DispatchMarkSentView(APIView):
+    permission_module = "dispatch"
+    permission_crud = "u"
     module_roles = ["LOGISTICA"]
     permission_classes = [IsModuleRole]
 
@@ -250,6 +256,8 @@ class DispatchMarkSentView(APIView):
 class DispatchLabelsPdfView(APIView):
     """Merge selected shipment label PDFs into one file for printing."""
 
+    permission_module = "dispatch"
+    permission_crud = "r"
     module_roles = ["LOGISTICA", "SUPERVISOR"]
     permission_classes = [IsModuleRole]
 

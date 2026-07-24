@@ -59,8 +59,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     status = models.CharField(
         max_length=16, choices=UserStatus.choices, default=UserStatus.ACTIVE
     )
-    # Empty list = use role defaults. Non-empty = explicit module keys (see module_access.py).
+    # Empty list = use role defaults. Non-empty = explicit module keys (legacy override).
     modules = models.JSONField(default=list, blank=True)
+    # Optional per-user CRUD map {module: {c,r,u,d}}. Empty = inherit role matrix.
+    module_permissions = models.JSONField(default=dict, blank=True)
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

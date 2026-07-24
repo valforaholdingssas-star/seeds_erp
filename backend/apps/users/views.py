@@ -8,7 +8,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.audit.services import log_audit_event
 from apps.users.models import PasswordResetToken, UserStatus
-from apps.users.permissions import IsAdmin
+from apps.users.permissions import IsAdmin, IsModuleRole
 from apps.users.serializers import (
     LoginSerializer,
     PasswordResetConfirmSerializer,
@@ -19,7 +19,7 @@ from apps.users.serializers import (
     modules_catalog_payload,
     role_choices,
 )
-from apps.users.module_access import load_role_modules, save_role_modules
+from apps.users.module_access import load_role_permissions, save_role_permissions
 
 User = get_user_model()
 
@@ -150,29 +150,38 @@ class RoleChoicesView(APIView):
 
 
 class ModulesCatalogView(APIView):
-    permission_classes = [IsAdmin]
+    permission_module = "roles"
+    permission_classes = [IsModuleRole]
 
     def get(self, request):
         return Response(modules_catalog_payload())
 
 
 class RolePermissionsView(APIView):
-    """Configure which modules each role can see. Changes apply to all users of that role
-    (unless the user has a personal modules override)."""
+    """Configure CRUD permissions per role × module. Propagates to all users of that role
+    (unless the user has a personal module_permissions / modules override)."""
 
-    permission_classes = [IsAdmin]
+    permission_module = "roles"
+    permission_classes = [IsModuleRole]
 
     def get(self, request):
         return Response(modules_catalog_payload())
 
     def put(self, request):
-        raw = request.data.get("role_defaults") or request.data.get("roles") or request.data
+        raw = (
+            request.data.get("role_permissions")
+            or request.data.get("role_defaults")
+            or request.data.get("roles")
+            or request.data
+        )
         if not isinstance(raw, dict):
             return Response(
-                {"detail": "Envía un objeto role_defaults: { ROL: [módulos...] }."},
+                {
+                    "detail": "Envía role_permissions: { ROL: { modulo: {c,r,u,d} } }."
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        saved = save_role_modules(
+        saved = save_role_permissions(
             raw,
             actor=request.user,
             ip=_client_ip(request),
@@ -181,22 +190,23 @@ class RolePermissionsView(APIView):
             actor=request.user,
             action="ROLE_PERMISSIONS_UPDATED",
             entity="RolePermissions",
-            entity_id="auth.role_modules",
+            entity_id="auth.role_permissions",
             metadata={"roles": list(saved.keys())},
             ip=_client_ip(request),
         )
+        payload = modules_catalog_payload()
         return Response(
             {
-                "detail": "Permisos por rol actualizados. Se aplican a todos los usuarios sin override personal.",
-                "modules": modules_catalog_payload()["modules"],
-                "role_defaults": saved,
+                "detail": "Permisos CRUD por rol actualizados. Aplican a todos los usuarios sin override personal.",
+                **payload,
             }
         )
 
 
 class UserViewSet(viewsets.ModelViewSet):
+    permission_module = "users"
     queryset = User.objects.all().order_by("full_name")
-    permission_classes = [IsAdmin]
+    permission_classes = [IsModuleRole]
     filterset_fields = ["role", "status", "email", "full_name"]
     search_fields = ["full_name", "email", "id_number", "phone"]
     ordering_fields = ["full_name", "email", "role", "created_at"]

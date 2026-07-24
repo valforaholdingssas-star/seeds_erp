@@ -17,6 +17,7 @@ def _client_ip(request) -> str | None:
 
 
 class LeadViewSet(viewsets.ModelViewSet):
+    permission_module = "leads"
     queryset = Lead.objects.select_related("seller", "converted_sale").all()
     serializer_class = LeadSerializer
     filterset_fields = ["status", "source", "seller", "city"]

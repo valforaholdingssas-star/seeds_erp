@@ -16,6 +16,8 @@ from apps.users.permissions import IsModuleRole
 
 
 class AnalyticsBaseView(APIView):
+    permission_module = "analytics"
+
     def get_permissions(self):
         self.module_roles = ["VENTAS", "SUPERVISOR", "VIEWER", "CONTABILIDAD", "LOGISTICA"]
         return [IsModuleRole()]
@@ -96,6 +98,8 @@ class AnalyticsOverviewView(AnalyticsBaseView):
 
 class HomeOverviewView(AnalyticsBaseView):
     """Operational KPIs for Inicio."""
+
+    permission_module = "home"
 
     def get(self, request):
         return Response(home_overview())

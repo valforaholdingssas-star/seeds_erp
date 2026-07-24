@@ -9,6 +9,9 @@ export type UserRole =
   | "SUPERVISOR"
   | "VIEWER";
 
+export type CrudFlags = { c: boolean; r: boolean; u: boolean; d: boolean };
+export type CrudAction = keyof CrudFlags;
+
 export type AuthUser = {
   id: string;
   full_name: string;
@@ -17,6 +20,7 @@ export type AuthUser = {
   status: string;
   modules?: string[];
   modules_effective?: string[];
+  permissions_effective?: Record<string, CrudFlags>;
 };
 
 type AuthState = {
@@ -43,3 +47,13 @@ export const useAuthStore = create<AuthState>()(
     { name: "seeds-auth" },
   ),
 );
+
+/** Check effective CRUD for a module (from /auth/me or login payload). */
+export function useCan(module: string, action: CrudAction = "r") {
+  const perms = useAuthStore((s) => s.user?.permissions_effective);
+  const modules = useAuthStore((s) => s.user?.modules_effective);
+  if (perms && perms[module]) return Boolean(perms[module][action]);
+  // Fallback: module list only implies read
+  if (modules?.includes(module)) return action === "r";
+  return false;
+}

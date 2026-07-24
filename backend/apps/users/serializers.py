@@ -4,14 +4,18 @@ from rest_framework import serializers
 from apps.users.models import Role, User, UserStatus
 from apps.users.module_access import (
     ALL_MODULE_KEYS,
+    CRUD_LABELS,
     MODULE_CATALOG,
-    default_modules_for_role,
+    load_role_permissions,
+    modules_from_permissions,
     user_effective_modules,
+    user_effective_permissions,
 )
 
 
 class UserSerializer(serializers.ModelSerializer):
     modules_effective = serializers.SerializerMethodField()
+    permissions_effective = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -25,14 +29,25 @@ class UserSerializer(serializers.ModelSerializer):
             "role",
             "status",
             "modules",
+            "module_permissions",
             "modules_effective",
+            "permissions_effective",
             "created_at",
             "last_login_at",
         ]
-        read_only_fields = ["id", "created_at", "last_login_at", "modules_effective"]
+        read_only_fields = [
+            "id",
+            "created_at",
+            "last_login_at",
+            "modules_effective",
+            "permissions_effective",
+        ]
 
     def get_modules_effective(self, obj) -> list[str]:
         return user_effective_modules(obj)
+
+    def get_permissions_effective(self, obj) -> dict:
+        return user_effective_permissions(obj)
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -55,6 +70,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "role",
             "status",
             "modules",
+            "module_permissions",
             "password",
         ]
         read_only_fields = ["id"]
@@ -84,6 +100,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             "role",
             "status",
             "modules",
+            "module_permissions",
             "password",
         ]
 
@@ -125,11 +142,14 @@ def role_choices() -> list[dict[str, str]]:
 
 
 def modules_catalog_payload() -> dict:
-    from apps.users.module_access import load_role_modules
-
+    role_perms = load_role_permissions()
     return {
         "modules": MODULE_CATALOG,
-        "role_defaults": load_role_modules(),
+        "crud": [{"key": k, "label": CRUD_LABELS[k]} for k in ("c", "r", "u", "d")],
+        "role_defaults": {
+            role: modules_from_permissions(perms) for role, perms in role_perms.items()
+        },
+        "role_permissions": role_perms,
     }
 
 

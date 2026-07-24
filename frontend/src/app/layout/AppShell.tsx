@@ -306,6 +306,7 @@ function SidebarNav({
 
   const role = user?.role;
   const modules = user?.modules_effective;
+  const perms = user?.permissions_effective;
 
   const visibleGroups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -313,7 +314,9 @@ function SidebarNav({
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => {
-          if (modules?.length && item.module) {
+          if (item.module && perms) {
+            if (!perms[item.module]?.r) return false;
+          } else if (modules?.length && item.module) {
             if (!modules.includes(item.module)) return false;
           } else if (role && item.roles && !item.roles.includes(role)) {
             return false;
@@ -322,7 +325,7 @@ function SidebarNav({
         }),
       }))
       .filter((g) => g.items.length > 0);
-  }, [query, role, modules]);
+  }, [query, role, modules, perms]);
 
   function isOpen(group: NavGroup) {
     if (query.trim()) return true;
