@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { formatCOP } from "@/lib/utils";
+import { formatCOP, formatSaleDate } from "@/lib/utils";
 import { formatSaleItemLine } from "@/lib/kitTypes";
 
 type SaleDetail = {
@@ -171,6 +171,7 @@ export function SaleDetailPage() {
           <h2 className="font-serif text-2xl text-green-900">Cliente</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Nombre" value={s.customer_name} />
+            <Field label="Fecha de venta" value={formatSaleDate(s.closed_at)} />
             <Field label="Documento" value={s.id_number} />
             <Field label="Email" value={s.email} />
             <Field label="Teléfono" value={s.phone} />

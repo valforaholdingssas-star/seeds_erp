@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime, time
 from decimal import Decimal, InvalidOperation
 import re
 
 from django.db import transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 
 from apps.sales.models import KommoSale, SaleSource
 from apps.sales.services.normalization import promote_to_consolidated
@@ -56,6 +58,38 @@ def _parse_money(value) -> Decimal:
         return Decimal("0")
 
 
+def _parse_kommo_closed_at(value) -> datetime | None:
+    """Parse Kommo FECHA DE CIERRE (epoch s/ms, ISO, or YYYY-MM-DD). Never invents 'now'."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        if timezone.is_naive(value):
+            return timezone.make_aware(value, timezone.get_current_timezone())
+        return value
+    raw = str(value).strip()
+    if not raw:
+        return None
+    tz = timezone.get_current_timezone()
+    # Numeric epoch (seconds or milliseconds)
+    try:
+        num = float(raw.replace(",", "."))
+        if num > 1e12:  # ms
+            num /= 1000.0
+        if num > 1e9:  # plausible unix timestamp
+            return datetime.fromtimestamp(num, tz=tz)
+    except (TypeError, ValueError, OSError, OverflowError):
+        pass
+    dt = parse_datetime(raw)
+    if dt:
+        if timezone.is_naive(dt):
+            return timezone.make_aware(dt, tz)
+        return dt
+    d = parse_date(raw[:10]) if len(raw) >= 10 else parse_date(raw)
+    if d:
+        return timezone.make_aware(datetime.combine(d, time.min), tz)
+    return None
+
+
 @transaction.atomic
 def upsert_kommo_from_enriched(
     *,
@@ -76,15 +110,14 @@ def upsert_kommo_from_enriched(
     contact = contact or {}
     contact_cfs = contact.get("custom_fields_values") or []
 
-    closed_raw = _cf(cfs, field_name="FECHA DE CIERRE")
-    closed_at = None
-    if closed_raw:
-        try:
-            # Kommo often sends epoch seconds
-            ts = int(float(closed_raw))
-            closed_at = timezone.datetime.fromtimestamp(ts, tz=timezone.get_current_timezone())
-        except Exception:
-            closed_at = timezone.now()
+    closed_raw = _cf_any(
+        cfs,
+        "FECHA DE CIERRE",
+        "Fecha de cierre",
+        "Fecha de Cierre",
+        "fecha de cierre",
+    )
+    closed_at = _parse_kommo_closed_at(closed_raw)
 
     total = _parse_money(lead.get("price") or 0)
     shipping = _parse_money(
@@ -116,7 +149,7 @@ def upsert_kommo_from_enriched(
         defaults={
             "raw_event": raw_event,
             "deal_name": lead.get("name") or "",
-            "closed_at": closed_at or timezone.now(),
+            "closed_at": closed_at,
             "total_value": total,
             "amount_shipping": shipping,
             "payment_account": payment_method.name if payment_method else payment_raw,

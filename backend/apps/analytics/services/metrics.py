@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from django.db.models import Count, Sum
-from django.db.models.functions import TruncDate, TruncMonth
+from django.db.models.functions import Coalesce, TruncDate, TruncMonth
 from django.utils import timezone
 
 from apps.config import settings_service as cfg
@@ -32,6 +32,11 @@ def _aware_range(date_from: date, date_to: date) -> tuple[datetime, datetime]:
     return start, end
 
 
+def _sale_at_expr():
+    """Channel sale date (closed_at), falling back to ingest time only if missing."""
+    return Coalesce("closed_at", "created_at")
+
+
 def _base_qs(
     *,
     date_from: date | None = None,
@@ -49,13 +54,15 @@ def _base_qs(
         qs = qs.filter(city_raw__icontains=city)
     if date_from and date_to:
         start, end = _aware_range(date_from, date_to)
-        qs = qs.filter(created_at__gte=start, created_at__lte=end)
+        qs = qs.annotate(_sale_at=_sale_at_expr()).filter(
+            _sale_at__gte=start, _sale_at__lte=end
+        )
     elif date_from:
         start, _ = _aware_range(date_from, date_from)
-        qs = qs.filter(created_at__gte=start)
+        qs = qs.annotate(_sale_at=_sale_at_expr()).filter(_sale_at__gte=start)
     elif date_to:
         _, end = _aware_range(date_to, date_to)
-        qs = qs.filter(created_at__lte=end)
+        qs = qs.annotate(_sale_at=_sale_at_expr()).filter(_sale_at__lte=end)
     return qs
 
 
@@ -280,9 +287,9 @@ def timeseries(
         city=city,
     )
     if granularity == "month":
-        trunc = TruncMonth("created_at")
+        trunc = TruncMonth(_sale_at_expr())
     else:
-        trunc = TruncDate("created_at")
+        trunc = TruncDate(_sale_at_expr())
     rows = (
         qs.annotate(bucket=trunc)
         .values("bucket")
@@ -333,9 +340,12 @@ def weekday_bars(
 
     def _buckets(qs):
         counts = [0.0] * 7
-        for sale in qs.only("created_at", "total_value"):
+        for sale in qs.only("closed_at", "created_at", "total_value"):
+            sale_at = sale.closed_at or sale.created_at
+            if not sale_at:
+                continue
             # Monday=0
-            idx = timezone.localtime(sale.created_at).weekday()
+            idx = timezone.localtime(sale_at).weekday()
             counts[idx] += float(sale.total_value or 0)
         return [
             {"weekday": i, "label": WEEKDAY_LABELS[i], "total": _money(v)}
@@ -389,7 +399,7 @@ def year_comparison(
 
     def _by_month(qs):
         rows = (
-            qs.annotate(bucket=TruncMonth("created_at"))
+            qs.annotate(bucket=TruncMonth(_sale_at_expr()))
             .values("bucket")
             .annotate(total=Sum("total_value"))
             .order_by("bucket")

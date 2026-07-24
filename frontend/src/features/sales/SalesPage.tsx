@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { InlineSelect } from "@/components/ui/InlineSelect";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { formatCOP } from "@/lib/utils";
+import { formatCOP, formatSaleDate } from "@/lib/utils";
 import { formatSaleItemLine } from "@/lib/kitTypes";
 
 type Sale = {
@@ -137,6 +137,15 @@ export function SalesPage() {
         accessorKey: "source",
         header: "Canal",
         cell: ({ getValue }) => <Badge variant="dark">{String(getValue())}</Badge>,
+      },
+      {
+        accessorKey: "closed_at",
+        header: "Fecha venta",
+        cell: ({ getValue }) => (
+          <span className="whitespace-nowrap text-sm">
+            {formatSaleDate(getValue() as string | null)}
+          </span>
+        ),
       },
       { accessorKey: "customer_name", header: "Cliente" },
       {

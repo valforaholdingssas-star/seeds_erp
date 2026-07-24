@@ -37,7 +37,7 @@ def tool_sales_summary(*, days: int = 7) -> dict[str, Any]:
     since = timezone.now() - timedelta(days=max(1, min(days, 90)))
     qs = ConsolidatedSale.objects.filter(
         state=SaleState.ACTIVE,
-        created_at__gte=since,
+        closed_at__gte=since,
     )
     agg = qs.aggregate(total=Sum("total_value"), iva=Sum("iva_generated"))
     return {
@@ -52,7 +52,7 @@ def tool_sales_summary(*, days: int = 7) -> dict[str, Any]:
 def tool_sales_by_seller(*, days: int = 7) -> dict[str, Any]:
     since = timezone.now() - timedelta(days=max(1, min(days, 90)))
     rows = (
-        ConsolidatedSale.objects.filter(state=SaleState.ACTIVE, created_at__gte=since)
+        ConsolidatedSale.objects.filter(state=SaleState.ACTIVE, closed_at__gte=since)
         .values("seller__name")
         .annotate(total=Sum("total_value"), orders=Count("id"))
         .order_by("-total")[:20]
