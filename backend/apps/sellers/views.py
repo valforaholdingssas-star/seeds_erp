@@ -6,7 +6,7 @@ from apps.audit.services import log_audit_event
 from apps.sellers.models import Vendedor
 from apps.sellers.serializers import VendedorSerializer
 from apps.sellers.services import ensure_system_vendors, resolve_vendedor
-from apps.users.permissions import IsModuleRole
+from apps.users.permissions import IsAdmin, IsModuleRole
 
 
 def _client_ip(request) -> str | None:
