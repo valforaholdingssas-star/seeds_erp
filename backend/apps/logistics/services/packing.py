@@ -4,20 +4,16 @@ from collections import defaultdict
 from typing import Any
 
 from apps.logistics.models import Shipment, ShipmentStatus
-from apps.sales.kit_types import kit_type_label
+from apps.sales.kit_types import kit_type_label, normalize_kit_type
 
 
-def _product_label(color: str, product_name: str, tipo: str) -> str:
+def _product_label(color: str, tipo: str, product_name: str = "") -> str:
     color_label = {"DORADO": "Dorado", "PLATEADO": "Plateado"}.get(color, color or "Producto")
-    kit = kit_type_label(tipo)
-    if kit and color_label:
-        return f"{kit} · {color_label}"
-    base = (product_name or "").strip() or color_label
-    if product_name and color in {"DORADO", "PLATEADO"} and color_label.lower() not in product_name.lower():
-        base = f"{product_name} · {color_label}"
+    kit = kit_type_label(tipo) or kit_type_label(product_name)
     if kit:
-        return f"{base} · {kit}"
-    if tipo.strip():
+        return f"{kit} · {color_label}" if color_label else kit
+    base = (product_name or "").strip() or color_label
+    if tipo.strip() and tipo.strip() not in base:
         return f"{base} · {tipo.strip()}"
     return base
 
@@ -25,6 +21,7 @@ def _product_label(color: str, product_name: str, tipo: str) -> str:
 def packing_summary(*, sent: bool = False) -> dict[str, Any]:
     """
     Resume pedidos listos (o enviados) para empacar: totales + cajas por producto.
+    Agrupa por tipo de kit normalizado + color (una sola caja por variante).
     """
     status = ShipmentStatus.ENVIADO if sent else ShipmentStatus.LISTO_PARA_ENVIAR
     qs = (
@@ -33,8 +30,8 @@ def packing_summary(*, sent: bool = False) -> dict[str, Any]:
         .filter(status=status)
     )
 
-    buckets: dict[tuple[str, str, str], dict[str, Any]] = {}
-    order_ids_by_key: dict[tuple[str, str, str], set] = defaultdict(set)
+    buckets: dict[tuple[str, str], dict[str, Any]] = {}
+    order_ids_by_key: dict[tuple[str, str], set] = defaultdict(set)
     total_units = 0
     order_count = qs.count()
 
@@ -43,15 +40,16 @@ def packing_summary(*, sent: bool = False) -> dict[str, Any]:
         for item in sale.items.all():
             if not item.quantity:
                 continue
-            color = item.color or ""
-            tipo = item.tipo or ""
-            name = item.product_name or ""
-            key = (color, name, tipo)
+            color = (item.color or "").strip().upper() or "OTRO"
+            name = (item.product_name or "").strip()
+            tipo_raw = (item.tipo or "").strip()
+            tipo = normalize_kit_type(tipo_raw) or normalize_kit_type(name) or tipo_raw or name or "OTRO"
+            key = (tipo, color)
             if key not in buckets:
                 buckets[key] = {
-                    "key": f"{color}|{name}|{tipo}",
-                    "label": _product_label(color, name, tipo),
-                    "color": color,
+                    "key": f"{tipo}|{color}",
+                    "label": _product_label(color, tipo, name),
+                    "color": color if color != "OTRO" else "",
                     "tipo": tipo,
                     "product_name": name,
                     "units": 0,
