@@ -82,6 +82,7 @@ def test_format_and_generate_mock(sale_with_shipment):
     shipment.refresh_from_db()
     assert shipment.status == ShipmentStatus.LISTO_PARA_ENVIAR
     assert shipment.tracking_number.startswith("MOCK")
+    assert shipment.tracking_url.startswith("https://tracking.envia.com/")
     sale.refresh_from_db()
     assert sale.amount_shipping == shipment.shipping_cost
 

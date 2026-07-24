@@ -14,6 +14,7 @@ class ShipmentAdmin(admin.ModelAdmin):
         "id",
         "status",
         "tracking_number",
+        "tracking_url",
         "city_mirror",
         "warning",
         "shipping_cost",

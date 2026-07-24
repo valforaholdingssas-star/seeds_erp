@@ -107,6 +107,7 @@ class Shipment(BaseModel):
     carrier = models.CharField(max_length=64, default="coordinadora")
     service = models.CharField(max_length=64, default="ground")
     tracking_number = models.CharField(max_length=128, blank=True, db_index=True)
+    tracking_url = models.URLField(blank=True, max_length=512)
     label_url = models.URLField(blank=True)
     shipping_cost = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     generated_city = models.CharField(max_length=128, blank=True)

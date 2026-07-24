@@ -71,7 +71,7 @@ def _extract_envia_result(body: dict) -> dict:
     data = body.get("data")
     item = data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else body)
     addr = item.get("address") or {}
-    tracking = (
+    tracking = str(
         item.get("trackingNumber")
         or item.get("tracking_number")
         or item.get("guia")
@@ -79,9 +79,19 @@ def _extract_envia_result(body: dict) -> dict:
     )
     cost = item.get("totalPrice") or item.get("Costo") or item.get("cost") or 0
     label = item.get("label") or item.get("label_url") or item.get("labelUrl") or ""
+    track_url = (
+        item.get("trackUrl")
+        or item.get("track_url")
+        or item.get("trackingUrl")
+        or item.get("tracking_url")
+        or ""
+    )
+    if not track_url and tracking:
+        track_url = f"https://tracking.envia.com/{tracking}"
     shipment_id = str(item.get("shipmentId") or item.get("id") or "")
     return {
-        "tracking_number": str(tracking),
+        "tracking_number": tracking,
+        "tracking_url": str(track_url),
         "shipping_cost": Decimal(str(cost or 0)),
         "label_url": str(label),
         "envia_shipment_id": shipment_id,
@@ -134,6 +144,7 @@ def generate_shipment_guide(shipment_id, *, actor=None) -> Shipment:
         if not parsed["tracking_number"]:
             raise RuntimeError(f"Envia no devolvió tracking: {body}")
         shipment.tracking_number = parsed["tracking_number"]
+        shipment.tracking_url = parsed["tracking_url"]
         shipment.shipping_cost = parsed["shipping_cost"]
         shipment.label_url = parsed["label_url"]
         shipment.envia_shipment_id = parsed["envia_shipment_id"]
@@ -239,6 +250,7 @@ def reopen_shipment_for_regenerate(shipment_id, *, actor=None) -> Shipment:
 
     prev_tracking = shipment.tracking_number
     shipment.tracking_number = ""
+    shipment.tracking_url = ""
     shipment.label_url = ""
     shipment.envia_shipment_id = ""
     shipment.shipping_cost = None

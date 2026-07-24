@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
-import { FileText } from "lucide-react";
+import { Copy, FileText } from "lucide-react";
 import { apiClient } from "@/lib/apiClient";
 import { DataTable } from "@/components/data/DataTable";
 import { Badge } from "@/components/ui/Badge";
@@ -10,6 +10,13 @@ import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { cn } from "@/lib/utils";
 
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    window.prompt("Copia el enlace de seguimiento:", text);
+  }
+}
 type PackLine = {
   color: string;
   tipo: string;
@@ -21,6 +28,7 @@ type PackLine = {
 type DispatchRow = {
   id: string;
   tracking_number: string;
+  tracking_url: string;
   sale_external_id: string;
   label_url: string;
   qty_dorados: number;
@@ -292,6 +300,35 @@ export function DispatchPage() {
         ),
       },
       { accessorKey: "tracking_number", header: "Guía" },
+      {
+        accessorKey: "tracking_url",
+        header: "Seguimiento",
+        cell: ({ row }) => {
+          const url = row.original.tracking_url;
+          if (!url) return "—";
+          return (
+            <div className="flex max-w-[200px] items-center gap-1">
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="truncate text-xs text-sage-600 underline underline-offset-2 hover:text-green-900"
+                title={url}
+              >
+                {url}
+              </a>
+              <button
+                type="button"
+                title="Copiar enlace"
+                onClick={() => void copyText(url)}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line text-green-900 hover:bg-cream-100"
+              >
+                <Copy strokeWidth={1.5} className="h-3 w-3" />
+              </button>
+            </div>
+          );
+        },
+      },
       { accessorKey: "sale_external_id", header: "Pedido" },
       {
         id: "tipo",

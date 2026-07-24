@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
-import { Ban, FileText, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
+import { Ban, Copy, FileText, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
 import { apiClient } from "@/lib/apiClient";
 import { DataTable } from "@/components/data/DataTable";
 import { KanbanBoard, type KanbanItem } from "@/components/kanban/KanbanBoard";
@@ -14,6 +14,13 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { formatCOP } from "@/lib/utils";
 import { useBatchConsole } from "@/features/batch/batchStore";
 
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    window.prompt("Copia el enlace de seguimiento:", text);
+  }
+}
 const SHIP_STATUSES = [
   "POR_GENERAR",
   "LISTO_PARA_ENVIAR",
@@ -38,6 +45,7 @@ type Shipment = {
   generated_address: string;
   status: string;
   tracking_number: string;
+  tracking_url: string;
   label_url: string;
   shipping_cost: string | null;
   warning: boolean;
@@ -297,11 +305,39 @@ export function ShipmentsPage() {
         cell: ({ row }) => row.original.tracking_number || "—",
       },
       {
+        accessorKey: "tracking_url",
+        header: "Seguimiento",
+        cell: ({ row }) => {
+          const url = row.original.tracking_url;
+          if (!url) return "—";
+          return (
+            <div className="flex max-w-[220px] items-center gap-1">
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="truncate text-xs text-sage-600 underline underline-offset-2 hover:text-green-900"
+                title={url}
+              >
+                {url}
+              </a>
+              <button
+                type="button"
+                title="Copiar enlace de seguimiento"
+                onClick={() => void copyText(url)}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line text-green-900 hover:bg-cream-100"
+              >
+                <Copy strokeWidth={1.5} className="h-3 w-3" />
+              </button>
+            </div>
+          );
+        },
+      },
+      {
         accessorKey: "shipping_cost",
         header: "Costo",
         cell: ({ getValue }) => (getValue() ? formatCOP(Number(getValue())) : "—"),
-      },
-      {
+      },      {
         id: "actions",
         header: "",
         cell: ({ row }) => {
@@ -471,6 +507,7 @@ export function ShipmentsPage() {
             "city_mirror",
             "status",
             "tracking_number",
+            "tracking_url",
             "address_mirror",
           ]}
           columnFilters={[

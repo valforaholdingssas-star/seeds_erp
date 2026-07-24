@@ -46,6 +46,7 @@ type SaleDetail = {
     id: string;
     status: string;
     tracking_number: string;
+    tracking_url: string;
     label_url: string;
     shipping_cost: string | null;
     warning: boolean;
@@ -237,6 +238,32 @@ export function SaleDetailPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Estado" value={<Badge variant="dark">{s.shipment.status}</Badge>} />
               <Field label="Guía" value={s.shipment.tracking_number} />
+              {s.shipment.tracking_url ? (
+                <div>
+                  <p className="label-caps text-text-muted">Seguimiento</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <a
+                      href={s.shipment.tracking_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="break-all text-sm text-sage-600 underline underline-offset-2 hover:text-green-900"
+                    >
+                      {s.shipment.tracking_url}
+                    </a>
+                    <button
+                      type="button"
+                      className="label-caps shrink-0 text-green-900 underline underline-offset-2"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(s.shipment!.tracking_url).catch(() => {
+                          window.prompt("Copia el enlace:", s.shipment!.tracking_url);
+                        });
+                      }}
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <Field label="Ciudad" value={s.shipment.city_mirror} />
               <Field label="Dirección" value={s.shipment.address_mirror} />
               <Field
