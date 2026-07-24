@@ -21,6 +21,7 @@ from apps.logistics.serializers import (
 )
 from apps.logistics.services.formatting import format_shipment
 from apps.logistics.services.packing import packing_summary
+from apps.logistics.services.labels_pdf import merge_shipment_label_pdfs
 from apps.logistics.services.shipments import (
     generate_shipment_guide,
     mark_shipment_cancelled_local,
@@ -244,3 +245,28 @@ class DispatchMarkSentView(APIView):
                 "shipments": ShipmentSerializer(updated, many=True).data,
             }
         )
+
+
+class DispatchLabelsPdfView(APIView):
+    """Merge selected shipment label PDFs into one file for printing."""
+
+    module_roles = ["LOGISTICA", "SUPERVISOR"]
+    permission_classes = [IsModuleRole]
+
+    def post(self, request):
+        from django.http import HttpResponse
+
+        ser = IdsSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            pdf_bytes = merge_shipment_label_pdfs(ser.validated_data["ids"])
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response(
+                {"detail": f"Error al unir PDFs: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = 'attachment; filename="guias-despacho.pdf"'
+        return response

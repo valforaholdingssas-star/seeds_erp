@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
+import { FileText } from "lucide-react";
 import { apiClient } from "@/lib/apiClient";
 import { DataTable } from "@/components/data/DataTable";
 import { Badge } from "@/components/ui/Badge";
@@ -21,6 +22,7 @@ type DispatchRow = {
   id: string;
   tracking_number: string;
   sale_external_id: string;
+  label_url: string;
   qty_dorados: number;
   qty_plateados: number;
   pack_lines: PackLine[];
@@ -235,20 +237,59 @@ export function DispatchPage() {
     },
   });
 
+  const downloadMergedPdf = useMutation({
+    mutationFn: async (ids: string[]) => {
+      try {
+        const { data } = await apiClient.post(
+          "/logistics/dispatch/labels-pdf/",
+          { ids },
+          { responseType: "blob" },
+        );
+        return data as Blob;
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { data?: Blob } };
+        const blob = axiosErr.response?.data;
+        if (blob instanceof Blob) {
+          const text = await blob.text();
+          try {
+            const json = JSON.parse(text) as { detail?: string };
+            throw new Error(json.detail || "No se pudo generar el PDF.");
+          } catch (inner) {
+            if (inner instanceof Error && inner.message !== "No se pudo generar el PDF.") {
+              throw inner;
+            }
+            throw new Error(text.slice(0, 200) || "No se pudo generar el PDF.");
+          }
+        }
+        throw err;
+      }
+    },
+    onSuccess: (blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `guias-despacho-${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    onError: (err) => {
+      window.alert(err instanceof Error ? err.message : "Error al descargar guías.");
+    },
+  });
+
   const columns = useMemo<ColumnDef<DispatchRow, unknown>[]>(
     () => [
       {
         id: "select",
         header: "",
-        cell: ({ row }) =>
-          tab === "ready" ? (
-            <input
-              type="checkbox"
-              checked={row.getIsSelected()}
-              onChange={row.getToggleSelectedHandler()}
-              className="h-4 w-4 accent-green-900"
-            />
-          ) : null,
+        cell: ({ row }) => (
+          <input
+            type="checkbox"
+            checked={row.getIsSelected()}
+            onChange={row.getToggleSelectedHandler()}
+            className="h-4 w-4 accent-green-900"
+          />
+        ),
       },
       { accessorKey: "tracking_number", header: "Guía" },
       { accessorKey: "sale_external_id", header: "Pedido" },
@@ -293,9 +334,29 @@ export function DispatchPage() {
         header: "Plateados",
         cell: ({ getValue }) => <Badge variant="dark">{String(getValue())}</Badge>,
       },
+      {
+        id: "pdf",
+        header: "PDF",
+        cell: ({ row }) =>
+          row.original.label_url ? (
+            <a
+              href={row.original.label_url}
+              target="_blank"
+              rel="noreferrer"
+              title="Abrir PDF de guía"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-line text-green-900 hover:bg-cream-100"
+            >
+              <FileText strokeWidth={1.5} className="h-3.5 w-3.5" />
+            </a>
+          ) : (
+            <span className="text-text-soft">—</span>
+          ),
+      },
     ],
-    [tab],
+    [],
   );
+
+  const selectedWithPdf = selected.filter((s) => Boolean(s.label_url));
 
   return (
     <div className="space-y-3">
@@ -328,6 +389,21 @@ export function DispatchPage() {
             >
               Enviados
             </Button>
+            {tab !== "pack" ? (
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                disabled={!selectedWithPdf.length || downloadMergedPdf.isPending}
+                onClick={() =>
+                  downloadMergedPdf.mutate(selectedWithPdf.map((s) => s.id))
+                }
+              >
+                {downloadMergedPdf.isPending
+                  ? "Uniendo…"
+                  : `PDF guías (${selectedWithPdf.length})`}
+              </Button>
+            ) : null}
             {tab === "ready" ? (
               <Button
                 type="button"
@@ -350,6 +426,34 @@ export function DispatchPage() {
           columns={columns}
           searchableKeys={["tracking_number", "sale_external_id"]}
           onSelectionChange={setSelected}
+          bulkActions={
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="cream"
+                disabled={!selectedWithPdf.length || downloadMergedPdf.isPending}
+                onClick={() =>
+                  downloadMergedPdf.mutate(selectedWithPdf.map((s) => s.id))
+                }
+              >
+                {downloadMergedPdf.isPending
+                  ? "Uniendo PDFs…"
+                  : `Descargar guías (${selectedWithPdf.length})`}
+              </Button>
+              {tab === "ready" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="cream"
+                  disabled={!selected.length || markSent.isPending}
+                  onClick={() => markSent.mutate(selected.map((s) => s.id))}
+                >
+                  Marcar enviado
+                </Button>
+              ) : null}
+            </>
+          }
           emptyTitle={tab === "ready" ? "Nada por despachar" : "Sin históricos"}
           emptyDescription={
             tab === "ready"

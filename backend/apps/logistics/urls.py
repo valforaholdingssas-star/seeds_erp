@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from apps.logistics.views import (
     BatchJobViewSet,
+    DispatchLabelsPdfView,
     DispatchListView,
     DispatchMarkSentView,
     DispatchPackSummaryView,
@@ -24,6 +25,11 @@ urlpatterns = [
         "logistics/dispatch/mark-sent/",
         DispatchMarkSentView.as_view(),
         name="dispatch-mark-sent",
+    ),
+    path(
+        "logistics/dispatch/labels-pdf/",
+        DispatchLabelsPdfView.as_view(),
+        name="dispatch-labels-pdf",
     ),
     path("", include(router.urls)),
 ]
