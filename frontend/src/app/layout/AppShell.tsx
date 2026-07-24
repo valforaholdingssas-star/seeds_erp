@@ -37,6 +37,8 @@ type NavItem = {
   icon: ComponentType<{ className?: string; strokeWidth?: number }>;
   end?: boolean;
   roles?: UserRole[];
+  /** Module key for per-user permission overrides (`modules_effective`). */
+  module?: string;
   keywords?: string[];
 };
 
@@ -66,6 +68,7 @@ const navGroups: NavGroup[] = [
         icon: LayoutDashboard,
         end: true,
         roles: ALL_ROLES,
+        module: "home",
         keywords: ["home", "dashboard"],
       },
     ],
@@ -79,6 +82,7 @@ const navGroups: NavGroup[] = [
         label: "Ventas",
         icon: ShoppingBag,
         roles: ALL_ROLES,
+        module: "sales",
         keywords: ["consolidado", "pedidos", "woo", "kommo"],
       },
       {
@@ -86,6 +90,7 @@ const navGroups: NavGroup[] = [
         label: "Leads",
         icon: Contact,
         roles: ["ADMIN", "VENTAS", "SUPERVISOR", "VIEWER"],
+        module: "leads",
         keywords: ["pipeline", "kanban"],
       },
       {
@@ -93,6 +98,7 @@ const navGroups: NavGroup[] = [
         label: "Métricas",
         icon: ChartColumnBig,
         roles: ALL_ROLES,
+        module: "analytics",
         keywords: ["looker", "graficos", "kpis"],
       },
       {
@@ -100,6 +106,7 @@ const navGroups: NavGroup[] = [
         label: "Asistente",
         icon: Sparkles,
         roles: ["ADMIN", "VENTAS", "SUPERVISOR"],
+        module: "ai",
         keywords: ["ia", "rag", "chat"],
       },
     ],
@@ -113,6 +120,7 @@ const navGroups: NavGroup[] = [
         label: "Envíos",
         icon: Truck,
         roles: ["ADMIN", "LOGISTICA", "VENTAS", "SUPERVISOR", "VIEWER"],
+        module: "logistics",
         keywords: ["guias", "envia", "direccion"],
       },
       {
@@ -120,6 +128,7 @@ const navGroups: NavGroup[] = [
         label: "Despachos",
         icon: Package,
         roles: ["ADMIN", "LOGISTICA", "SUPERVISOR", "VIEWER"],
+        module: "dispatch",
         keywords: ["empacar", "cajas", "bodega"],
       },
     ],
@@ -133,6 +142,7 @@ const navGroups: NavGroup[] = [
         label: "Productos",
         icon: Boxes,
         roles: ["ADMIN", "LOGISTICA", "SUPERVISOR", "VIEWER"],
+        module: "inventory",
         keywords: ["stock", "sku"],
       },
       {
@@ -140,6 +150,7 @@ const navGroups: NavGroup[] = [
         label: "Materiales",
         icon: Leaf,
         roles: ["ADMIN", "LOGISTICA", "SUPERVISOR", "VIEWER"],
+        module: "inventory",
         keywords: ["insumos", "cajas", "bodega"],
       },
       {
@@ -147,6 +158,7 @@ const navGroups: NavGroup[] = [
         label: "Kardex",
         icon: ClipboardList,
         roles: ["ADMIN", "LOGISTICA", "SUPERVISOR", "VIEWER"],
+        module: "inventory",
         keywords: ["movimientos", "entradas", "salidas"],
       },
     ],
@@ -160,6 +172,7 @@ const navGroups: NavGroup[] = [
         label: "Facturas",
         icon: Receipt,
         roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
+        module: "accounting",
         keywords: ["alegra", "dian"],
       },
       {
@@ -167,6 +180,7 @@ const navGroups: NavGroup[] = [
         label: "Reembolsos",
         icon: Receipt,
         roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
+        module: "accounting",
         keywords: ["anulacion", "nota credito"],
       },
       {
@@ -174,6 +188,7 @@ const navGroups: NavGroup[] = [
         label: "IVA",
         icon: Percent,
         roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
+        module: "accounting",
         keywords: ["impuestos"],
       },
       {
@@ -181,6 +196,7 @@ const navGroups: NavGroup[] = [
         label: "Clientes",
         icon: Users,
         roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
+        module: "accounting",
         keywords: ["contacto", "cedula"],
       },
     ],
@@ -194,6 +210,7 @@ const navGroups: NavGroup[] = [
         label: "Eventos fallidos",
         icon: AlertTriangle,
         roles: ["ADMIN", "VENTAS", "SUPERVISOR"],
+        module: "integrations",
         keywords: ["webhooks", "recovery", "errores"],
       },
     ],
@@ -207,6 +224,7 @@ const navGroups: NavGroup[] = [
         label: "Vendedores",
         icon: Handshake,
         roles: ["ADMIN"],
+        module: "sellers",
         keywords: ["comerciales", "metas"],
       },
       {
@@ -214,6 +232,7 @@ const navGroups: NavGroup[] = [
         label: "Medios de pago",
         icon: Wallet,
         roles: ["ADMIN"],
+        module: "payment_methods",
         keywords: ["nequi", "efectivo", "cuenta"],
       },
       {
@@ -221,6 +240,7 @@ const navGroups: NavGroup[] = [
         label: "Pack rules",
         icon: Package,
         roles: ["ADMIN"],
+        module: "pack_rules",
         keywords: ["woo", "multiplicador", "kits"],
       },
       {
@@ -228,6 +248,7 @@ const navGroups: NavGroup[] = [
         label: "Usuarios",
         icon: Users,
         roles: ["ADMIN"],
+        module: "users",
         keywords: ["roles", "permisos", "equipo"],
       },
       {
@@ -235,6 +256,7 @@ const navGroups: NavGroup[] = [
         label: "Geografía",
         icon: MapPinned,
         roles: ["ADMIN", "LOGISTICA", "SUPERVISOR"],
+        module: "geo",
         keywords: ["ciudades", "municipios"],
       },
       {
@@ -242,6 +264,7 @@ const navGroups: NavGroup[] = [
         label: "Configuración",
         icon: Settings,
         roles: ["ADMIN"],
+        module: "settings",
         keywords: ["api", "secrets", "woo", "alegra", "envia"],
       },
     ],
@@ -273,6 +296,7 @@ function SidebarNav({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const role = user?.role;
+  const modules = user?.modules_effective;
 
   const visibleGroups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -280,12 +304,16 @@ function SidebarNav({
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => {
-          if (role && item.roles && !item.roles.includes(role)) return false;
+          if (modules?.length && item.module) {
+            if (!modules.includes(item.module)) return false;
+          } else if (role && item.roles && !item.roles.includes(role)) {
+            return false;
+          }
           return itemMatches(item, q);
         }),
       }))
       .filter((g) => g.items.length > 0);
-  }, [query, role]);
+  }, [query, role, modules]);
 
   function isOpen(group: NavGroup) {
     if (query.trim()) return true;

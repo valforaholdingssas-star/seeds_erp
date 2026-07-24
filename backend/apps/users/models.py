@@ -59,6 +59,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     status = models.CharField(
         max_length=16, choices=UserStatus.choices, default=UserStatus.ACTIVE
     )
+    # Empty list = use role defaults. Non-empty = explicit module keys (see module_access.py).
+    modules = models.JSONField(default=list, blank=True)
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

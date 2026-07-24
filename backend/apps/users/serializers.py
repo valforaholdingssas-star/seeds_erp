@@ -2,9 +2,17 @@ from django.contrib.auth import authenticate
 from rest_framework import serializers
 
 from apps.users.models import Role, User, UserStatus
+from apps.users.module_access import (
+    ALL_MODULE_KEYS,
+    MODULE_CATALOG,
+    default_modules_for_role,
+    user_effective_modules,
+)
 
 
 class UserSerializer(serializers.ModelSerializer):
+    modules_effective = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
@@ -16,14 +24,24 @@ class UserSerializer(serializers.ModelSerializer):
             "id_number",
             "role",
             "status",
+            "modules",
+            "modules_effective",
             "created_at",
             "last_login_at",
         ]
-        read_only_fields = ["id", "created_at", "last_login_at"]
+        read_only_fields = ["id", "created_at", "last_login_at", "modules_effective"]
+
+    def get_modules_effective(self, obj) -> list[str]:
+        return user_effective_modules(obj)
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
+    modules = serializers.ListField(
+        child=serializers.ChoiceField(choices=ALL_MODULE_KEYS),
+        required=False,
+        allow_empty=True,
+    )
 
     class Meta:
         model = User
@@ -36,6 +54,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "id_number",
             "role",
             "status",
+            "modules",
             "password",
         ]
         read_only_fields = ["id"]
@@ -46,7 +65,14 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=8, required=False)
+    password = serializers.CharField(
+        write_only=True, min_length=8, required=False, allow_blank=False
+    )
+    modules = serializers.ListField(
+        child=serializers.ChoiceField(choices=ALL_MODULE_KEYS),
+        required=False,
+        allow_empty=True,
+    )
 
     class Meta:
         model = User
@@ -57,6 +83,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             "id_number",
             "role",
             "status",
+            "modules",
             "password",
         ]
 
@@ -95,6 +122,15 @@ class RoleChoicesSerializer(serializers.Serializer):
 
 def role_choices() -> list[dict[str, str]]:
     return [{"value": value, "label": label} for value, label in Role.choices]
+
+
+def modules_catalog_payload() -> dict:
+    return {
+        "modules": MODULE_CATALOG,
+        "role_defaults": {
+            role: default_modules_for_role(role) for role, _ in Role.choices
+        },
+    }
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):

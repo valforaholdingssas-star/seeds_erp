@@ -253,6 +253,20 @@ SETTINGS: list[Setting] = [
         type=SettingType.STRING,
         help="status_id que dispara consolidación.",
     ),
+    Setting(
+        key="kommo.registered_pipeline_id",
+        label="Pipeline «registrado en ERP»",
+        group="KOMMO",
+        type=SettingType.STRING,
+        help="Opcional. Pipeline destino tras registrar la venta en el ERP.",
+    ),
+    Setting(
+        key="kommo.registered_status_id",
+        label="Columna «registrado en ERP»",
+        group="KOMMO",
+        type=SettingType.STRING,
+        help="Tras consolidar, el lead se mueve aquí. Debe ser distinta a venta ganada.",
+    ),
     # AI
     Setting(
         key="ai.provider",

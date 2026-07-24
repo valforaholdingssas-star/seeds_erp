@@ -89,6 +89,78 @@ def fetch_contact(contact_id: str) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
 
 
+def update_lead_status(
+    lead_id: str,
+    *,
+    status_id: str | int,
+    pipeline_id: str | int | None = None,
+) -> dict[str, Any]:
+    """
+    Move a Kommo lead to another column (PATCH /api/v4/leads).
+    Used after ERP registration so Digital Pipeline can show «registrado en ERP».
+    """
+    base, token = _kommo_base(), _kommo_token()
+    if not base or not token:
+        raise ValueError("Kommo no configurado (subdomain/token).")
+    url = f"{base}/api/v4/leads"
+    body: list[dict[str, Any]] = [
+        {
+            "id": int(lead_id),
+            "status_id": int(status_id),
+        }
+    ]
+    if pipeline_id:
+        body[0]["pipeline_id"] = int(pipeline_id)
+    with httpx.Client(timeout=30.0) as client:
+        res = client.patch(
+            url,
+            json=body,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+        )
+        IntegrationLog.objects.create(
+            provider=IntegrationSource.KOMMO,
+            method="PATCH",
+            url=url,
+            request_headers={"Authorization": "***REDACTED***"},
+            request_body=body,
+            response_status=res.status_code,
+            response_body={},
+            latency_ms=0,
+            success=res.status_code < 300,
+            error="" if res.status_code < 300 else res.text[:500],
+            ref_type="KommoLead",
+            ref_id=str(lead_id),
+        )
+        res.raise_for_status()
+        data = res.json() if res.content else {}
+        return data if isinstance(data, dict) else {"raw": data}
+
+
+def mark_lead_registered_in_erp(lead_id: str) -> dict[str, Any] | None:
+    """
+    If kommo.registered_status_id is configured, move the lead there.
+    Returns None when skipped (not configured / same as won).
+    """
+    registered_status = str(cfg.get("kommo.registered_status_id") or "").strip()
+    if not registered_status:
+        return None
+    won_status = str(cfg.get("kommo.won_status_id") or "").strip()
+    if won_status and registered_status == won_status:
+        logger.warning(
+            "kommo.registered_status_id equals won_status_id; skip stage move to avoid loop"
+        )
+        return None
+    registered_pipeline = str(cfg.get("kommo.registered_pipeline_id") or "").strip() or None
+    return update_lead_status(
+        lead_id,
+        status_id=registered_status,
+        pipeline_id=registered_pipeline,
+    )
+
+
 def enrich_from_webhook_payload(payload: dict) -> tuple[dict, dict | None]:
     """
     If payload already has enriched lead+contact, use them.

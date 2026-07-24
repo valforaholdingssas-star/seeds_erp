@@ -348,10 +348,16 @@ class KommoWebhookView(APIView):
                 ]
             )
         process_raw_event.delay(str(event_obj.id))
+        # Digital Pipeline / salesbot: HTTP 200 = recibido. El avance a la
+        # columna «registrado en ERP» ocurre al terminar el proceso async.
         return Response(
             {
+                "ok": True,
                 "status": "accepted",
+                "message": "Lead aceptado; se registrará en el ERP y se moverá de etapa si está configurado.",
                 "event_id": str(event_obj.id),
+                "lead_id": str(lead_id),
+                "status_id": str(status_id),
                 "reprocessed": not created,
             },
             status=200,

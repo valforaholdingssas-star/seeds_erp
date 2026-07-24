@@ -16,6 +16,7 @@ from apps.users.serializers import (
     UserCreateSerializer,
     UserSerializer,
     UserUpdateSerializer,
+    modules_catalog_payload,
     role_choices,
 )
 
@@ -145,6 +146,13 @@ class RoleChoicesView(APIView):
 
     def get(self, request):
         return Response(role_choices())
+
+
+class ModulesCatalogView(APIView):
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        return Response(modules_catalog_payload())
 
 
 class UserViewSet(viewsets.ModelViewSet):

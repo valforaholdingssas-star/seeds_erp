@@ -11,7 +11,11 @@ from django.utils import timezone
 from apps.config import settings_service as cfg
 from apps.integrations.models import IntegrationSource, RawEventStatus, RawWebhookEvent
 from apps.sales.services.kommo import upsert_kommo_from_enriched
-from apps.sales.services.kommo_client import enrich_from_webhook_payload, kommo_configured
+from apps.sales.services.kommo_client import (
+    enrich_from_webhook_payload,
+    kommo_configured,
+    mark_lead_registered_in_erp,
+)
 from apps.sales.services.woocommerce import upsert_ecommerce_from_payload
 
 logger = logging.getLogger(__name__)
@@ -65,6 +69,7 @@ def process_raw_event(self, event_id: str):
             # Guard early on webhook status_id / pipeline_id (before enrich)
             won_status = str(cfg.get("kommo.won_status_id") or "")
             won_pipeline = str(cfg.get("kommo.won_pipeline_id") or "")
+            registered_status = str(cfg.get("kommo.registered_status_id") or "")
             raw_status = str(
                 event.payload.get("leads[status][0][status_id]")
                 or event.payload.get("status_id")
@@ -77,6 +82,13 @@ def process_raw_event(self, event_id: str):
                 or (event.payload.get("lead") or {}).get("pipeline_id")
                 or ""
             )
+            # Avoid re-ingest loop when we move the lead to «registrado en ERP».
+            if registered_status and raw_status and raw_status == registered_status:
+                event.status = RawEventStatus.IGNORED
+                event.error = "status_id es columna registrado-en-ERP (sin reproceso)"
+                event.processed_at = timezone.now()
+                event.save(update_fields=["status", "error", "processed_at", "updated_at"])
+                return
             if won_pipeline and raw_pipeline and raw_pipeline != won_pipeline:
                 event.status = RawEventStatus.IGNORED
                 event.error = f"pipeline_id {raw_pipeline} != won {won_pipeline}"
@@ -103,6 +115,16 @@ def process_raw_event(self, event_id: str):
             # Trust the webhook status/pipeline guards above. The lead may have
             # moved to another column since the event (common on reprocess).
             upsert_kommo_from_enriched(lead=lead, contact=contact, raw_event=event)
+            lead_id = str(lead.get("id") or "").strip()
+            if lead_id:
+                try:
+                    mark_lead_registered_in_erp(lead_id)
+                except Exception as move_exc:
+                    # Sale already in ERP; surface stage-move failure without blocking retries forever.
+                    logger.exception(
+                        "Kommo stage move failed after ERP register lead=%s", lead_id
+                    )
+                    event.error = f"registrado en ERP; fallo al mover etapa: {move_exc}"
         else:
             event.status = RawEventStatus.IGNORED
             event.error = f"Source no soportado en sales: {event.source}"
@@ -110,8 +132,11 @@ def process_raw_event(self, event_id: str):
             event.save(update_fields=["status", "error", "processed_at", "updated_at"])
             return
 
+        stage_note = (event.error or "").strip()
         event.status = RawEventStatus.PROCESSED
-        event.error = ""
+        event.error = (
+            stage_note if stage_note.startswith("registrado en ERP") else ""
+        )
         event.processed_at = timezone.now()
         event.attempts = (event.attempts or 0) + 1
         event.save(

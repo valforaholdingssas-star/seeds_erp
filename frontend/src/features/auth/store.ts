@@ -15,6 +15,8 @@ export type AuthUser = {
   email: string;
   role: UserRole;
   status: string;
+  modules?: string[];
+  modules_effective?: string[];
 };
 
 type AuthState = {
