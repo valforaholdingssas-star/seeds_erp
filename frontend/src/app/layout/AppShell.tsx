@@ -245,11 +245,11 @@ const navGroups: NavGroup[] = [
       },
       {
         to: "/users",
-        label: "Usuarios",
+        label: "Usuarios y roles",
         icon: Users,
         roles: ["ADMIN"],
         module: "users",
-        keywords: ["roles", "permisos", "equipo"],
+        keywords: ["roles", "permisos", "equipo", "contraseña"],
       },
       {
         to: "/geo",

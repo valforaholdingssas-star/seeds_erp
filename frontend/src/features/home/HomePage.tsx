@@ -27,6 +27,7 @@ const links = [
   { to: "/logistics", label: "Envíos", hint: "Guías y formateo" },
   { to: "/accounting", label: "Facturas", hint: "Alegra · reembolsos · IVA" },
   { to: "/analytics", label: "Métricas", hint: "Panel Looker" },
+  { to: "/users", label: "Usuarios y roles", hint: "Contraseñas · permisos" },
   { to: "/integrations/events", label: "Eventos", hint: "Fallidos y reproceso" },
 ];
 

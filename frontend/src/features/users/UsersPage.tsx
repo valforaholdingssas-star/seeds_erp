@@ -31,7 +31,14 @@ type ModulesCatalog = {
 
 type Paginated<T> = { count: number; results: T[] };
 
-const ROLES = ["ADMIN", "VENTAS", "LOGISTICA", "CONTABILIDAD", "SUPERVISOR", "VIEWER"];
+const ROLES = [
+  { value: "ADMIN", label: "Administrador" },
+  { value: "VENTAS", label: "Ventas" },
+  { value: "LOGISTICA", label: "Logística" },
+  { value: "CONTABILIDAD", label: "Contabilidad" },
+  { value: "SUPERVISOR", label: "Supervisor" },
+  { value: "VIEWER", label: "Solo lectura" },
+];
 
 const emptyCreate = {
   full_name: "",
@@ -150,7 +157,11 @@ export function UsersPage() {
       {
         accessorKey: "role",
         header: "Rol",
-        cell: ({ getValue }) => <Badge variant="dark">{String(getValue())}</Badge>,
+        cell: ({ getValue }) => {
+          const v = String(getValue());
+          const label = ROLES.find((r) => r.value === v)?.label || v;
+          return <Badge variant="dark">{label}</Badge>;
+        },
       },
       {
         accessorKey: "status",
@@ -173,15 +184,15 @@ export function UsersPage() {
       },
       {
         id: "actions",
-        header: "",
+        header: "Acciones",
         cell: ({ row }) => (
           <Button
             type="button"
             size="xs"
-            variant="ghost"
+            variant="outline"
             onClick={() => setEditing(row.original)}
           >
-            Editar
+            Rol / contraseña
           </Button>
         ),
       },
@@ -221,9 +232,16 @@ export function UsersPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader eyebrow="Usuarios" title="Equipo y permisos" />
+      <PageHeader eyebrow="Parametrización" title="Usuarios y roles" />
+
+      <Alert variant="info">
+        Para cambiar el rol o la contraseña de alguien: en la tabla de abajo pulsa{" "}
+        <strong>Rol / contraseña</strong>. Solo visible si entras como ADMIN
+        (menú → Parametrización → Usuarios y roles).
+      </Alert>
 
       <Card>
+        <p className="mb-3 label-caps text-text-muted">Crear usuario</p>
         <form onSubmit={onSubmit} className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <div>
             <FieldLabel>Nombre</FieldLabel>
@@ -260,8 +278,8 @@ export function UsersPage() {
               onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
             >
               {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
+                <option key={r.value} value={r.value}>
+                  {r.label}
                 </option>
               ))}
             </select>
@@ -283,7 +301,7 @@ export function UsersPage() {
         <Card tone="cream">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <p className="label-caps text-text-muted">Editar usuario</p>
+              <p className="label-caps text-text-muted">Rol, contraseña y permisos</p>
               <p className="mt-1 font-serif text-2xl text-green-900">{editing.email}</p>
             </div>
             <Button type="button" size="xs" variant="ghost" onClick={() => setEditing(null)}>
@@ -318,8 +336,8 @@ export function UsersPage() {
                   onChange={(e) => applyRoleDefaults(e.target.value)}
                 >
                   {ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
+                    <option key={r.value} value={r.value}>
+                      {r.label}
                     </option>
                   ))}
                 </select>
@@ -333,8 +351,8 @@ export function UsersPage() {
                     setEditForm((f) => ({ ...f, status: e.target.value }))
                   }
                 >
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="SUSPENDED">SUSPENDED</option>
+                  <option value="ACTIVE">Activo</option>
+                  <option value="SUSPENDED">Suspendido</option>
                 </select>
               </div>
             </div>
