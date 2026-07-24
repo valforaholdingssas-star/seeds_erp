@@ -103,3 +103,31 @@ class HomeOverviewView(AnalyticsBaseView):
 
     def get(self, request):
         return Response(home_overview())
+
+
+class BigQuerySyncView(APIView):
+    """Enqueue or run BigQuery analytics sync (admin / settings module)."""
+
+    permission_module = "settings"
+    permission_crud = "u"
+    permission_classes = [IsModuleRole]
+
+    def post(self, request):
+        async_mode = str(request.data.get("async", "1")).lower() not in {
+            "0",
+            "false",
+            "no",
+        }
+        if async_mode:
+            from apps.analytics.tasks import sync_bigquery_analytics
+
+            task = sync_bigquery_analytics.delay()
+            return Response(
+                {
+                    "detail": "Sync BigQuery encolado.",
+                    "task_id": task.id,
+                }
+            )
+        from apps.analytics.services.bigquery_export import sync_analytics_to_bigquery
+
+        return Response(sync_analytics_to_bigquery())

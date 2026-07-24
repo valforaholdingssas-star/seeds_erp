@@ -147,6 +147,16 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_ALWAYS_EAGER = env_bool("CELERY_TASK_ALWAYS_EAGER", False)
 
+# Nightly analytics export for Looker Studio (America/Bogota).
+from celery.schedules import crontab  # noqa: E402
+
+CELERY_BEAT_SCHEDULE = {
+    "bigquery-sync-nightly": {
+        "task": "apps.analytics.tasks.sync_bigquery_analytics",
+        "schedule": crontab(hour=3, minute=15),
+    },
+}
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",

@@ -93,6 +93,11 @@ class ConfigTestView(APIView):
             result = ping_kommo()
             return Response(result, status=200)
 
+        if group == "BIGQUERY":
+            from apps.analytics.services.bigquery_export import ping_bigquery
+
+            return Response(ping_bigquery(), status=200)
+
         if has_secret_defs and not secrets_set:
             return Response(
                 {

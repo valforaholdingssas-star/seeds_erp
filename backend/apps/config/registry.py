@@ -351,6 +351,45 @@ SETTINGS: list[Setting] = [
         default=None,
         help="Mapa rol → módulo → {c,r,u,d}. Editable en Parametrización → Roles.",
     ),
+    # BigQuery (Looker Studio)
+    Setting(
+        key="bigquery.enabled",
+        label="Sincronizar a BigQuery",
+        group="BIGQUERY",
+        type=SettingType.BOOL,
+        default=False,
+        help="Si está activo, el job diario sube ventas/envíos a BigQuery para Looker.",
+    ),
+    Setting(
+        key="bigquery.project_id",
+        label="GCP Project ID",
+        group="BIGQUERY",
+        type=SettingType.STRING,
+        help="Ej. seeds-erp-analytics",
+    ),
+    Setting(
+        key="bigquery.dataset_id",
+        label="Dataset",
+        group="BIGQUERY",
+        type=SettingType.STRING,
+        default="seeds_erp",
+        help="Se crea automáticamente si no existe.",
+    ),
+    Setting(
+        key="bigquery.location",
+        label="Location",
+        group="BIGQUERY",
+        type=SettingType.STRING,
+        default="us",
+        help="Región del dataset (us, us-east1, southamerica-east1, …).",
+    ),
+    Setting(
+        key="bigquery.credentials_json",
+        label="Service account JSON",
+        group="BIGQUERY",
+        type=SettingType.SECRET,
+        help="JSON completo de la service account con rol BigQuery Data Editor + Job User.",
+    ),
 ]
 
 SETTINGS_BY_KEY: dict[str, Setting] = {s.key: s for s in SETTINGS}

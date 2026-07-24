@@ -24,7 +24,7 @@ type SettingItem = {
 
 type TestResult = { ok: boolean; message: string; mode?: string };
 
-const GROUP_ORDER = ["ENVIA", "ALEGRA", "WOOCOMMERCE", "KOMMO", "AI", "BUSINESS"];
+const GROUP_ORDER = ["ENVIA", "ALEGRA", "WOOCOMMERCE", "KOMMO", "AI", "BIGQUERY", "BUSINESS"];
 
 export function SettingsPage() {
   const qc = useQueryClient();
