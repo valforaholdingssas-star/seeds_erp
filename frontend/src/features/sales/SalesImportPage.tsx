@@ -24,10 +24,10 @@ type CommitResult = {
   rejected: number;
 };
 
-const SAMPLE = `external_id,source,customer_name,city_raw,total_value,qty_dorados,commercial_raw,status
-CSV-DEMO-1,FERIAS,Ana Demo,Bogotá,189000,1,FERIAS,completed
-CSV-DEMO-2,MANUAL,Luis Demo,Medellín,250000,2,VENDEDORA 1,completed
-CSV-BAD,,Sin Nombre,,abc,0,,completed
+const SAMPLE = `external_id,source,customer_name,city_raw,total_value,qty_dorados,commercial_raw,status,guia,costo_guia,fecha_envio
+CSV-DEMO-1,KOMMO,Ana Demo,Bogotá,189000,1,COMERCIAL 1,completed,76116478969,18500,2026-01-15
+CSV-DEMO-2,MANUAL,Luis Demo,Medellín,250000,2,VENDEDORA 1,completed,76116478000,15200,2026-01-16
+CSV-BAD,,Sin Nombre,,abc,0,,completed,,,
 `;
 
 export function SalesImportPage() {
@@ -116,6 +116,11 @@ export function SalesImportPage() {
       {error && <Alert variant="error">{error}</Alert>}
 
       <Card tone="cream" className="seeds-panel space-y-4">
+        <p className="text-sm text-text-muted">
+          Compatible con el export de Excel (Deal ID, NÚMERO DE GUÍA, TRASPORTE, ENVIADO, etc.).
+          Filas sin valor se omiten. Con guía se marca <strong>ENVIADO</strong> sin regenerar Envia ni
+          descontar inventario.
+        </p>
         <div className="flex flex-wrap gap-3">
           <label className="inline-flex min-h-11 cursor-pointer items-center rounded-[999px] border border-line px-6 label-caps">
             Elegir archivo

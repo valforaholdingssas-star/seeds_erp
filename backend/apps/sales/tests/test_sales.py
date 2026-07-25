@@ -181,3 +181,32 @@ def test_csv_import_dry_run_and_commit(api, admin_user):
     assert commit.data["created"] == 1
     assert commit.data["rejected"] == 1
     assert ConsolidatedSale.objects.filter(external_id="CSV-T1").exists()
+
+
+@pytest.mark.django_db
+def test_csv_import_historical_with_guide(api, admin_user):
+    from apps.logistics.models import Shipment, ShipmentStatus
+
+    ensure_system_vendors()
+    api.force_authenticate(user=admin_user)
+    csv_text = (
+        "external_id,source,customer_name,city_raw,total_value,qty_dorados,"
+        "commercial_raw,status,guia,costo_guia,fecha_envio\n"
+        "CSV-HIST-1,KOMMO,Cliente Hist,Bogotá,200000,1,COMERCIAL 1,completed,"
+        "76119990001,18500,2026-01-10\n"
+    )
+    commit = api.post(
+        "/api/v1/sales/import/",
+        {"csv": csv_text, "dry_run": False, "on_duplicate": "skip"},
+        format="json",
+    )
+    assert commit.status_code == 201
+    assert commit.data["created"] == 1
+    sale = ConsolidatedSale.objects.get(external_id="CSV-HIST-1")
+    shipment = Shipment.objects.get(sale=sale)
+    assert shipment.tracking_number == "76119990001"
+    assert shipment.status == ShipmentStatus.ENVIADO
+    assert shipment.shipping_cost == Decimal("18500")
+    assert shipment.sent_at is not None
+    assert "76119990001" in (shipment.tracking_url or "")
+    assert shipment.warning_detail.get("historical_import") is True

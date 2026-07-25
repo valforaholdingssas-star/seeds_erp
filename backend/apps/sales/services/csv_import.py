@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import csv
 import io
+import re
+import unicodedata
 import uuid
+from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -39,6 +42,14 @@ CANONICAL_FIELDS = [
     "closed_at",
     "order_notes",
     "fulfillment_type",
+    # Históricos ya despachados
+    "tracking_number",
+    "tracking_url",
+    "shipping_cost",
+    "label_url",
+    "carrier",
+    "sent_at",
+    "shipment_status",
 ]
 
 HEADER_ALIASES: dict[str, str] = {
@@ -46,14 +57,22 @@ HEADER_ALIASES: dict[str, str] = {
     "external_id": "external_id",
     "order_id": "external_id",
     "lead_id": "external_id",
+    "deal_id": "external_id",
+    "formateador_de_id": "external_id",
     "canal": "source",
     "source": "source",
     "income_source": "source",
+    "fuente": "source",
+    "fuente_de_ingreso": "source",
     "cliente": "customer_name",
     "customer_name": "customer_name",
     "nombre": "customer_name",
+    "nombre_del_negocio": "customer_name",
+    "deal_name": "customer_name",
     "email": "email",
     "correo": "email",
+    "correo_asociado": "email",
+    "associated_contact": "email",
     "telefono": "phone",
     "phone": "phone",
     "celular": "phone",
@@ -72,16 +91,20 @@ HEADER_ALIASES: dict[str, str] = {
     "total": "total_value",
     "total_value": "total_value",
     "transporte": "amount_shipping",
+    "trasporte": "amount_shipping",  # typo en export histórico
     "shipping": "amount_shipping",
     "amount_shipping": "amount_shipping",
     "cuenta": "payment_account",
+    "cuenta_bancaria": "payment_account",
     "payment_account": "payment_account",
     "vendedor": "commercial_raw",
     "comercial": "commercial_raw",
     "commercial_raw": "commercial_raw",
     "dorados": "qty_dorados",
+    "cantidad_dorados": "qty_dorados",
     "qty_dorados": "qty_dorados",
     "plateados": "qty_plateados",
+    "cantidad_plateados": "qty_plateados",
     "qty_plateados": "qty_plateados",
     "tipo_dorados": "tipo_dorados",
     "tipo dorados": "tipo_dorados",
@@ -89,15 +112,42 @@ HEADER_ALIASES: dict[str, str] = {
     "tipo plateados": "tipo_plateados",
     "status": "status",
     "estado": "status",
+    "status_de_la_orden": "status",
     "fecha": "closed_at",
     "closed_at": "closed_at",
     "fecha_cierre": "closed_at",
+    "fecha_de_cierre": "closed_at",
     "notas": "order_notes",
     "order_notes": "order_notes",
     "fulfillment_type": "fulfillment_type",
     "tipo_entrega": "fulfillment_type",
     "entrega": "fulfillment_type",
     "fulfillment": "fulfillment_type",
+    "guia": "tracking_number",
+    "tracking": "tracking_number",
+    "tracking_number": "tracking_number",
+    "numero_guia": "tracking_number",
+    "numero_de_guia": "tracking_number",
+    "nro_guia": "tracking_number",
+    "tracking_url": "tracking_url",
+    "url_seguimiento": "tracking_url",
+    "link_seguimiento": "tracking_url",
+    "costo_guia": "shipping_cost",
+    "shipping_cost": "shipping_cost",
+    "costo_envio": "shipping_cost",
+    "label_url": "label_url",
+    "etiqueta": "label_url",
+    "pdf_guia": "label_url",
+    "carrier": "carrier",
+    "transportadora": "carrier",
+    "sent_at": "sent_at",
+    "fecha_envio": "sent_at",
+    "fecha_enviado": "sent_at",
+    "fecha_de_generacion_de_guia": "sent_at",
+    "shipment_status": "shipment_status",
+    "estado_envio": "shipment_status",
+    "estado_guia": "shipment_status",
+    "enviado": "shipment_status",
 }
 
 SOURCE_MODELS = {
@@ -109,7 +159,10 @@ SOURCE_MODELS = {
 
 
 def _norm_header(h: str) -> str:
-    return (h or "").strip().lower().replace(" ", "_")
+    """Lowercase, spaces→_, strip accents (NÚMERO DE GUÍA → numero_de_guia)."""
+    s = (h or "").strip().lower().replace(" ", "_")
+    s = "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+    return s
 
 
 def detect_mapping(headers: list[str]) -> dict[str, str | None]:
@@ -120,6 +173,38 @@ def detect_mapping(headers: list[str]) -> dict[str, str | None]:
         if key and mapping.get(key) is None:
             mapping[key] = header
     return mapping
+
+
+def _scalar_str(val: Any) -> str:
+    """Excel-safe stringify: 76116174690.0 → '76116174690', bools/dates clean."""
+    if val is None:
+        return ""
+    if isinstance(val, bool):
+        return "true" if val else "false"
+    if isinstance(val, int):
+        return str(val)
+    if isinstance(val, float):
+        if val.is_integer():
+            return str(int(val))
+        return str(val)
+    if isinstance(val, datetime):
+        return val.replace(microsecond=0).isoformat(sep=" ")
+    if isinstance(val, date):
+        return val.isoformat()
+    text = str(val).strip()
+    if re.fullmatch(r"-?\d+\.0+", text):
+        return text.split(".", 1)[0]
+    return text
+
+
+def _customer_display_name(raw: str) -> str:
+    """'Ecommerce | 4435 | Maribel Henao' → 'Maribel Henao'."""
+    name = (raw or "").strip()
+    if "|" in name:
+        parts = [p.strip() for p in name.split("|") if p.strip()]
+        if len(parts) >= 2:
+            return parts[-1]
+    return name
 
 
 def _dec(value: Any) -> Decimal:
@@ -145,16 +230,35 @@ def _int(value: Any) -> int:
 def _parse_closed_at(value: Any):
     if not value:
         return timezone.now()
+    if isinstance(value, datetime):
+        dt = value
+        if timezone.is_naive(dt):
+            return timezone.make_aware(dt, timezone.get_current_timezone())
+        return dt
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return timezone.make_aware(datetime.combine(value, time(12, 0)), timezone.get_current_timezone())
+
     text = str(value).strip()
-    dt = parse_datetime(text)
+    isoish = text.replace(" ", "T", 1) if " " in text and "T" not in text else text
+    dt = parse_datetime(isoish)
     if dt:
         if timezone.is_naive(dt):
             return timezone.make_aware(dt, timezone.get_current_timezone())
         return dt
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y",
+        "%m/%d/%Y",
+    ):
+        try:
+            naive = datetime.strptime(text[:26], fmt)
+            return timezone.make_aware(naive, timezone.get_current_timezone())
+        except ValueError:
+            continue
     try:
-        # YYYY-MM-DD
-        from datetime import date, datetime, time
-
         d = date.fromisoformat(text[:10])
         return timezone.make_aware(datetime.combine(d, time(12, 0)), timezone.get_current_timezone())
     except ValueError:
@@ -228,7 +332,7 @@ def parse_xlsx_bytes(data: bytes) -> tuple[list[str], list[dict[str, str]]]:
                 if val is None:
                     row[header] = ""
                 else:
-                    row[header] = str(val).strip() if not isinstance(val, str) else val.strip()
+                    row[header] = _scalar_str(val)
                     if row[header]:
                         empty = False
             if not empty:
@@ -250,12 +354,15 @@ def validate_row(row: dict[str, Any], mapping: dict[str, str | None], row_num: i
         header = mapping.get(field)
         if not header:
             return ""
-        return str(row.get(header) or "").strip()
+        return _scalar_str(row.get(header))
 
     errors: list[str] = []
     source = _normalize_source(get("source"))
-    external_id = get("external_id") or f"CSV-{uuid.uuid4().hex[:10].upper()}"
-    customer_name = get("customer_name")
+    external_id = get("external_id")
+    if not external_id:
+        errors.append("Deal ID / external_id obligatorio")
+        external_id = f"CSV-{uuid.uuid4().hex[:10].upper()}"
+    customer_name = _customer_display_name(get("customer_name"))
     if not customer_name:
         errors.append("customer_name obligatorio")
     try:
@@ -272,8 +379,11 @@ def validate_row(row: dict[str, Any], mapping: dict[str, str | None], row_num: i
         qty_dorados = qty_plateados = 0
         errors.append(str(exc))
 
-    if qty_dorados <= 0 and qty_plateados <= 0:
-        qty_dorados = 1  # default 1 kit for historical rows without qty
+    # Filas vacías del export (sin valor): no inventar venta.
+    if total_value <= 0:
+        errors.append("valor debe ser > 0")
+    elif qty_dorados <= 0 and qty_plateados <= 0:
+        qty_dorados = 1  # default 1 kit solo si hay valor
 
     commercial_raw = get("commercial_raw")
     if source == SaleSource.MANUAL and not commercial_raw:
@@ -287,10 +397,66 @@ def validate_row(row: dict[str, Any], mapping: dict[str, str | None], row_num: i
     if status not in {"processing", "completed", "cancelled", "failed", "refunded", "pending"}:
         status = "completed"
 
+    tracking_number = get("tracking_number")
+    tracking_url = get("tracking_url")
+    label_url = get("label_url")
+    carrier = get("carrier") or "coordinadora"
+    shipment_raw = (get("shipment_status") or "").strip().upper()
+    # Columna ENVIADO del Excel llega como true/false.
+    if shipment_raw in {"TRUE", "1", "SI", "SÍ", "YES"}:
+        shipment_status = "ENVIADO"
+    elif shipment_raw in {"FALSE", "0", "NO"}:
+        shipment_status = "LISTO_PARA_ENVIAR" if tracking_number else "POR_GENERAR"
+    else:
+        shipment_status = shipment_raw
+
+    # Histórico declarado como ya despachado: con guía siempre ENVIADO (no cola logística).
+    if tracking_number:
+        shipment_status = "ENVIADO"
+
+    try:
+        shipping_cost_raw = get("shipping_cost")
+        shipping_cost = _dec(shipping_cost_raw) if shipping_cost_raw else None
+    except ValueError as exc:
+        shipping_cost = None
+        errors.append(str(exc))
+
+    # En este export, TRASPORTE es el costo de guía / flete.
+    if shipping_cost is None and amount_shipping > 0 and tracking_number:
+        shipping_cost = amount_shipping
+    if shipping_cost is not None and amount_shipping == 0:
+        amount_shipping = shipping_cost
+
+    # Histórico ya despachado: si hay guía y no dicen estado, asumir ENVIADO.
+    if tracking_number and not shipment_status:
+        shipment_status = "ENVIADO"
+    if shipment_status and shipment_status not in {
+        "POR_GENERAR",
+        "GUIA_FALLIDA",
+        "LISTO_PARA_ENVIAR",
+        "ENVIADO",
+        "REVISAR",
+        "CANCELADA",
+    }:
+        shipment_status = "ENVIADO"
+
+    # Con guía: forzar ENVIA para que exista Shipment (no regenera Envia).
     fulfillment = normalize_fulfillment_type(
         get("fulfillment_type"),
-        requires_shipping=bool(get("address_raw") or get("city_raw")),
+        requires_shipping=bool(tracking_number or get("address_raw") or get("city_raw")),
     )
+    if tracking_number:
+        fulfillment = "ENVIA"
+
+    sent_at = None
+    if get("sent_at"):
+        sent_at = _parse_closed_at(get("sent_at"))
+    elif tracking_number and shipment_status == "ENVIADO":
+        sent_at = _parse_closed_at(get("closed_at"))
+
+    if tracking_number and not tracking_url:
+        tracking_url = f"https://envia.com/es-CO/tracking?label={tracking_number}"
+
     payload = {
         "external_id": external_id,
         "source": source,
@@ -315,12 +481,22 @@ def validate_row(row: dict[str, Any], mapping: dict[str, str | None], row_num: i
         "income_source": source,
         "fulfillment_type": fulfillment,
         "requires_shipping": fulfillment == "ENVIA",
+        "tracking_number": tracking_number,
+        "tracking_url": tracking_url,
+        "shipping_cost": shipping_cost,
+        "label_url": label_url,
+        "carrier": carrier,
+        "sent_at": sent_at,
+        "shipment_status": shipment_status,
     }
     return {"row": row_num, "ok": not errors, "errors": errors, "data": payload}
 
 
-def dry_run_csv(text: str, mapping: dict[str, str | None] | None = None) -> dict[str, Any]:
-    headers, rows = parse_csv_text(text)
+def dry_run_table(
+    headers: list[str],
+    rows: list[dict[str, Any]],
+    mapping: dict[str, str | None] | None = None,
+) -> dict[str, Any]:
     mapping = mapping or detect_mapping(headers)
     results = []
     for i, row in enumerate(rows, start=2):
@@ -335,15 +511,26 @@ def dry_run_csv(text: str, mapping: dict[str, str | None] | None = None) -> dict
     }
 
 
+def dry_run_csv(text: str, mapping: dict[str, str | None] | None = None) -> dict[str, Any]:
+    headers, rows = parse_csv_text(text)
+    return dry_run_table(headers, rows, mapping=mapping)
+
+
+def dry_run_xlsx(data: bytes, mapping: dict[str, str | None] | None = None) -> dict[str, Any]:
+    headers, rows = parse_xlsx_bytes(data)
+    return dry_run_table(headers, rows, mapping=mapping)
+
+
 @transaction.atomic
-def commit_csv(
-    text: str,
+def commit_table(
+    headers: list[str],
+    rows: list[dict[str, Any]],
     *,
     mapping: dict[str, str | None] | None = None,
     on_duplicate: str = "skip",
     actor=None,
 ) -> dict[str, Any]:
-    report = dry_run_csv(text, mapping=mapping)
+    report = dry_run_table(headers, rows, mapping=mapping)
     created = updated = skipped = rejected = 0
     details: list[dict] = []
 
@@ -404,6 +591,7 @@ def commit_csv(
             status = "created"
 
         promote_to_consolidated(source_sale, source=source, actor=actor)
+        _apply_historical_shipment(source_sale, source=source, data=data, actor=actor)
         details.append({"row": item["row"], "status": status, "external_id": data["external_id"]})
 
     log_audit_event(
@@ -427,3 +615,90 @@ def commit_csv(
         "details": details[:200],
         "mapping": report["mapping"],
     }
+
+
+@transaction.atomic
+def commit_csv(
+    text: str,
+    *,
+    mapping: dict[str, str | None] | None = None,
+    on_duplicate: str = "skip",
+    actor=None,
+) -> dict[str, Any]:
+    headers, rows = parse_csv_text(text)
+    return commit_table(
+        headers, rows, mapping=mapping, on_duplicate=on_duplicate, actor=actor
+    )
+
+
+@transaction.atomic
+def commit_xlsx(
+    data: bytes,
+    *,
+    mapping: dict[str, str | None] | None = None,
+    on_duplicate: str = "skip",
+    actor=None,
+) -> dict[str, Any]:
+    headers, rows = parse_xlsx_bytes(data)
+    return commit_table(
+        headers, rows, mapping=mapping, on_duplicate=on_duplicate, actor=actor
+    )
+
+
+def _apply_historical_shipment(source_sale, *, source: str, data: dict, actor=None) -> None:
+    """
+    Filas con guía ya generada: deja Shipment en ENVIADO con tracking/costo.
+    No llama Envia ni descuenta inventario (histórico).
+    """
+    tracking = (data.get("tracking_number") or "").strip()
+    ship_status = (data.get("shipment_status") or "").strip().upper()
+    if not tracking and ship_status not in {"ENVIADO", "LISTO_PARA_ENVIAR", "CANCELADA"}:
+        return
+
+    from apps.logistics.models import ShipmentStatus
+    from apps.logistics.services.shipments import ensure_shipment_for_sale
+    from apps.sales.models import ConsolidatedSale
+
+    sale = ConsolidatedSale.objects.filter(source=source, external_id=data["external_id"]).first()
+    if not sale:
+        return
+
+    # Asegura ENVIA + requires_shipping por si el promote llegó sin guía en signal.
+    if tracking and (not sale.requires_shipping or sale.fulfillment_type != "ENVIA"):
+        sale.requires_shipping = True
+        sale.fulfillment_type = "ENVIA"
+        sale.save(update_fields=["requires_shipping", "fulfillment_type", "updated_at"])
+
+    shipment = ensure_shipment_for_sale(sale, actor=actor)
+    if not shipment:
+        return
+
+    status = ship_status or (ShipmentStatus.ENVIADO if tracking else shipment.status)
+    if status not in ShipmentStatus.values:
+        status = ShipmentStatus.ENVIADO
+
+    shipment.tracking_number = tracking or shipment.tracking_number
+    shipment.tracking_url = (data.get("tracking_url") or "").strip() or shipment.tracking_url
+    shipment.label_url = (data.get("label_url") or "").strip() or shipment.label_url
+    shipment.carrier = (data.get("carrier") or shipment.carrier or "coordinadora")[:64]
+    cost = data.get("shipping_cost")
+    if cost is not None:
+        shipment.shipping_cost = cost
+    elif data.get("amount_shipping"):
+        shipment.shipping_cost = data["amount_shipping"]
+    shipment.status = status
+    if status == ShipmentStatus.ENVIADO:
+        shipment.sent_at = data.get("sent_at") or shipment.sent_at or timezone.now()
+        shipment.last_error = ""
+    # Marca para ocultar de colas operativas de logística/despacho.
+    detail = dict(shipment.warning_detail or {})
+    detail["historical_import"] = True
+    shipment.warning_detail = detail
+    shipment.address_mirror = shipment.address_mirror or sale.address_raw
+    shipment.city_mirror = shipment.city_mirror or sale.city_raw
+    shipment.state_mirror = shipment.state_mirror or sale.state_raw
+    shipment.save()
+
+    if shipment.shipping_cost is not None and sale.amount_shipping != shipment.shipping_cost:
+        sale.amount_shipping = shipment.shipping_cost
+        sale.save(update_fields=["amount_shipping", "updated_at"])

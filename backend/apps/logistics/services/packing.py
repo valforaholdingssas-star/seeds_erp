@@ -28,6 +28,7 @@ def packing_summary(*, sent: bool = False) -> dict[str, Any]:
         Shipment.objects.select_related("sale")
         .prefetch_related("sale__items")
         .filter(status=status)
+        .exclude(warning_detail__historical_import=True)
     )
 
     buckets: dict[tuple[str, str], dict[str, Any]] = {}

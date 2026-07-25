@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { InlineSelect } from "@/components/ui/InlineSelect";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PaginationBar } from "@/components/ui/PaginationBar";
 import { formatCOP, formatSaleDate } from "@/lib/utils";
 import { formatSaleItemLine } from "@/lib/kitTypes";
 
@@ -33,7 +34,7 @@ type Sale = {
   items: { color: string; tipo?: string; quantity: number }[];
 };
 
-type Paginated<T> = { count: number; results: T[] };
+type Paginated<T> = { count: number; next: string | null; previous: string | null; results: T[] };
 type PayMethod = { id: string; name: string };
 
 const SOURCES = ["ECOMMERCE", "KOMMO", "FERIAS", "MANUAL"];
@@ -56,12 +57,19 @@ export function SalesPage() {
   const [selected, setSelected] = useState<Sale[]>([]);
   const [bulkPaymentId, setBulkPaymentId] = useState("");
   const [bulkFulfillment, setBulkFulfillment] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   const sales = useQuery({
-    queryKey: ["sales"],
+    queryKey: ["sales", page, pageSize],
     queryFn: async () => {
-      const { data } = await apiClient.get<Paginated<Sale> | Sale[]>("/sales/");
-      return Array.isArray(data) ? data : data.results;
+      const { data } = await apiClient.get<Paginated<Sale>>("/sales/", {
+        params: { page, page_size: pageSize },
+      });
+      return {
+        results: data.results || [],
+        count: data.count ?? 0,
+      };
     },
   });
 
@@ -70,7 +78,7 @@ export function SalesPage() {
     queryFn: async () => {
       const { data } = await apiClient.get<Paginated<PayMethod> | PayMethod[]>(
         "/payment-methods/",
-        { params: { active_only: "1" } },
+        { params: { active_only: "1", page_size: 200 } },
       );
       return Array.isArray(data) ? data : data.results;
     },
@@ -105,6 +113,9 @@ export function SalesPage() {
     () => (paymentMethods.data || []).map((m) => ({ value: m.id, label: m.name })),
     [paymentMethods.data],
   );
+
+  const saleRows = sales.data?.results || [];
+  const totalCount = sales.data?.count || 0;
 
   const columns = useMemo<ColumnDef<Sale, unknown>[]>(
     () => [
@@ -280,13 +291,13 @@ export function SalesPage() {
 
   const kanbanItems = useMemo<KanbanItem[]>(
     () =>
-      (sales.data || []).map((s) => ({
+      saleRows.map((s) => ({
         id: s.id,
         columnId: s.source,
         title: s.customer_name || s.external_id,
         subtitle: `${formatCOP(Number(s.total_value))} · ${s.city_raw || "—"}`,
       })),
-    [sales.data],
+    [saleRows],
   );
 
   return (
@@ -340,6 +351,21 @@ export function SalesPage() {
         }
       />
 
+      <PaginationBar
+        page={page}
+        pageSize={pageSize}
+        total={totalCount}
+        onPageChange={(p) => {
+          setPage(p);
+          setSelected([]);
+        }}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+          setSelected([]);
+        }}
+      />
+
       {view === "kanban" ? (
         <KanbanBoard
           columns={SOURCES.map((s) => ({
@@ -353,7 +379,7 @@ export function SalesPage() {
         />
       ) : (
         <DataTable
-          data={sales.data || []}
+          data={saleRows}
           columns={columns}
           searchableKeys={[
             "external_id",

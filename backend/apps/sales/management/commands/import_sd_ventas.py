@@ -2,11 +2,11 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.sales.services.csv_import import commit_csv, xlsx_to_csv_text
+from apps.sales.services.csv_import import commit_xlsx, dry_run_xlsx
 
 
 class Command(BaseCommand):
-    help = "Importa ventas históricas desde un .xlsx (primera hoja) vía commit_csv."
+    help = "Importa ventas históricas desde un .xlsx (primera hoja)."
 
     def add_arguments(self, parser):
         parser.add_argument("path", type=str, help="Ruta al archivo .xlsx")
@@ -30,14 +30,10 @@ class Command(BaseCommand):
             raise CommandError("Se espera un archivo .xlsx")
 
         data = path.read_bytes()
-        text = xlsx_to_csv_text(data)
-        if not text.strip():
-            raise CommandError("Hoja vacía o sin encabezados.")
-
         if options["dry_run"]:
-            from apps.sales.services.csv_import import dry_run_csv
-
-            report = dry_run_csv(text)
+            report = dry_run_xlsx(data)
+            if report["total"] == 0:
+                raise CommandError("Hoja vacía o sin encabezados.")
             self.stdout.write(
                 self.style.WARNING(
                     f"dry_run: total={report['total']} valid={report['valid']} "
@@ -46,8 +42,8 @@ class Command(BaseCommand):
             )
             return
 
-        result = commit_csv(
-            text,
+        result = commit_xlsx(
+            data,
             on_duplicate=options["on_duplicate"],
             actor=None,
         )

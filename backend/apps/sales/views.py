@@ -18,7 +18,7 @@ from apps.sales.serializers import (
     ManualSaleCreateSerializer,
     WithdrawSerializer,
 )
-from apps.sales.services.csv_import import commit_csv, dry_run_csv, xlsx_to_csv_text
+from apps.sales.services.csv_import import commit_csv, commit_xlsx, dry_run_csv, dry_run_xlsx
 from apps.sales.services.internal_forms import create_feria_sale, create_manual_sale
 from apps.sales.services.normalization import calc_fiscal, withdraw_from_consolidated
 from apps.sales.services.resync import start_woo_resync
@@ -188,24 +188,35 @@ class ConsolidatedSaleViewSet(viewsets.ModelViewSet):
 
         text = request.data.get("csv") or ""
         upload = request.FILES.get("file")
+        xlsx_raw: bytes | None = None
         if upload:
             name = (getattr(upload, "name", "") or "").lower()
             raw = upload.read()
             if name.endswith((".xlsx", ".xlsm")):
-                text = xlsx_to_csv_text(raw)
+                xlsx_raw = raw
             else:
                 text = raw.decode("utf-8-sig", errors="replace")
-        if not text.strip():
+        if xlsx_raw is None and not str(text).strip():
             return Response({"detail": "CSV/XLSX vacío."}, status=400)
 
         if dry:
+            if xlsx_raw is not None:
+                return Response(dry_run_xlsx(xlsx_raw, mapping=mapping))
             return Response(dry_run_csv(text, mapping=mapping))
-        result = commit_csv(
-            text,
-            mapping=mapping,
-            on_duplicate=on_duplicate,
-            actor=request.user,
-        )
+        if xlsx_raw is not None:
+            result = commit_xlsx(
+                xlsx_raw,
+                mapping=mapping,
+                on_duplicate=on_duplicate,
+                actor=request.user,
+            )
+        else:
+            result = commit_csv(
+                text,
+                mapping=mapping,
+                on_duplicate=on_duplicate,
+                actor=request.user,
+            )
         return Response(result, status=201)
 
 
