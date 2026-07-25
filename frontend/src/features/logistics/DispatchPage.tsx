@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { cn } from "@/lib/utils";
+import { cn, formatCOP, formatSaleDate } from "@/lib/utils";
 
 async function copyText(text: string) {
   try {
@@ -30,6 +30,8 @@ type DispatchRow = {
   tracking_number: string;
   tracking_url: string;
   sale_external_id: string;
+  sale_closed_at: string | null;
+  shipping_cost: string | null;
   label_url: string;
   qty_dorados: number;
   qty_plateados: number;
@@ -300,6 +302,16 @@ export function DispatchPage() {
         ),
       },
       { accessorKey: "tracking_number", header: "Guía" },
+      {
+        accessorKey: "sale_closed_at",
+        header: "Fecha venta",
+        cell: ({ getValue }) => formatSaleDate(getValue() as string | null),
+      },
+      {
+        accessorKey: "shipping_cost",
+        header: "Costo Envia",
+        cell: ({ getValue }) => (getValue() ? formatCOP(Number(getValue())) : "—"),
+      },
       {
         accessorKey: "tracking_url",
         header: "Seguimiento",

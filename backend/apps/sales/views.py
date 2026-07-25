@@ -20,7 +20,7 @@ from apps.sales.serializers import (
 )
 from apps.sales.services.csv_import import commit_csv, commit_xlsx, dry_run_csv, dry_run_xlsx
 from apps.sales.services.internal_forms import create_feria_sale, create_manual_sale
-from apps.sales.services.normalization import calc_fiscal, withdraw_from_consolidated
+from apps.sales.services.normalization import calc_fiscal, guide_cost_for_sale, withdraw_from_consolidated
 from apps.sales.services.resync import start_woo_resync
 from apps.sales.tasks import (
     enqueue_woo_resync,
@@ -97,7 +97,7 @@ class ConsolidatedSaleViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         sale = serializer.save()
-        products, iva, net = calc_fiscal(sale.total_value, sale.amount_shipping)
+        products, iva, net = calc_fiscal(sale.total_value, guide_cost_for_sale(sale))
         sale.amount_products = products
         sale.iva_generated = iva
         sale.net_value = net

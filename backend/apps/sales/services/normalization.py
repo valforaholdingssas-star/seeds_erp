@@ -34,14 +34,17 @@ def get_iva_rate() -> Decimal:
         return Decimal("19")
 
 
-def calc_fiscal(total_value: Decimal, amount_shipping: Decimal) -> tuple[Decimal, Decimal, Decimal]:
+def calc_fiscal(total_value: Decimal, guide_cost: Decimal) -> tuple[Decimal, Decimal, Decimal]:
     """
-    IVA_GENERADO = max(0, (Valor − Transporte) − (Valor − Transporte)/1.19)
-    VALOR_AL_NETO = Valor − IVA_generado
-    amount_products = Valor − Transporte (aproximación operativa)
+    Base gravable = lo que el cliente pagó por producto:
+      total_value − costo real de la guía Envia (no el flete cobrado al cliente).
+
+    IVA_GENERADO = max(0, base − base/1.19)
+    VALOR_AL_NETO = total_value − IVA_generado
+    amount_products = base
     """
     total = Decimal(total_value or 0)
-    shipping = Decimal(amount_shipping or 0)
+    shipping = Decimal(guide_cost or 0)
     taxable = total - shipping
     if taxable < 0:
         taxable = Decimal("0")
@@ -49,9 +52,20 @@ def calc_fiscal(total_value: Decimal, amount_shipping: Decimal) -> tuple[Decimal
     divisor = Decimal("1") + (rate / Decimal("100"))
     iva = max(Decimal("0"), taxable - (taxable / divisor))
     iva = iva.quantize(Decimal("0.01"))
-    net = (total - iva).quantize(Decimal("0.01"))
     products = taxable.quantize(Decimal("0.01"))
+    net = (total - iva).quantize(Decimal("0.01"))
     return products, iva, net
+
+
+def guide_cost_for_sale(sale: ConsolidatedSale) -> Decimal:
+    """Costo Envia de la guía; 0 si aún no hay guía / no aplica."""
+    try:
+        shipment = sale.shipment
+    except Exception:
+        return Decimal("0")
+    if shipment is None or shipment.shipping_cost is None:
+        return Decimal("0")
+    return Decimal(shipment.shipping_cost)
 
 
 def pack_multiplier(woo_product_id: str | None, product_name: str = "") -> int:
@@ -175,7 +189,7 @@ def promote_to_consolidated(
             actor=actor,
         )
 
-    products, iva, net = calc_fiscal(source_sale.total_value, source_sale.amount_shipping)
+    products, iva, net = calc_fiscal(source_sale.total_value, Decimal("0"))
 
     payment_method = getattr(source_sale, "payment_method", None)
     if payment_method is None:
@@ -375,14 +389,17 @@ def apply_status_transition(
 
 
 def recalculate_shipping(sale: ConsolidatedSale, shipping_cost: Decimal, actor=None) -> ConsolidatedSale:
-    sale.amount_shipping = Decimal(shipping_cost or 0)
-    products, iva, net = calc_fiscal(sale.total_value, sale.amount_shipping)
+    """
+    Recalcula IVA / neto con el costo real de la guía Envia.
+    No modifica amount_shipping (flete cobrado al cliente en la venta).
+    """
+    guide = Decimal(shipping_cost or 0)
+    products, iva, net = calc_fiscal(sale.total_value, guide)
     sale.amount_products = products
     sale.iva_generated = iva
     sale.net_value = net
     sale.save(
         update_fields=[
-            "amount_shipping",
             "amount_products",
             "iva_generated",
             "net_value",
@@ -391,9 +408,9 @@ def recalculate_shipping(sale: ConsolidatedSale, shipping_cost: Decimal, actor=N
     )
     log_audit_event(
         actor=actor,
-        action="SALE_SHIPPING_UPDATED",
+        action="SALE_FISCAL_FROM_GUIDE",
         entity="ConsolidatedSale",
         entity_id=str(sale.id),
-        metadata={"shipping": str(shipping_cost)},
+        metadata={"guide_cost": str(guide)},
     )
     return sale

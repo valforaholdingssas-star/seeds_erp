@@ -751,6 +751,7 @@ def _apply_historical_shipment(source_sale, *, source: str, data: dict, actor=No
     shipment.state_mirror = shipment.state_mirror or sale.state_raw
     shipment.save()
 
-    if shipment.shipping_cost is not None and sale.amount_shipping != shipment.shipping_cost:
-        sale.amount_shipping = shipment.shipping_cost
-        sale.save(update_fields=["amount_shipping", "updated_at"])
+    if shipment.shipping_cost is not None:
+        from apps.sales.services.normalization import recalculate_shipping
+
+        recalculate_shipping(sale, shipment.shipping_cost, actor=actor)

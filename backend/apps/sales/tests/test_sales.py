@@ -46,6 +46,15 @@ def test_calc_fiscal_iva_19():
 
 
 @pytest.mark.django_db
+def test_calc_fiscal_uses_envia_guide_not_customer_shipping():
+    # Cliente pagó 119000 total; Envia cobró 19000 por la guía.
+    products, iva, net = calc_fiscal(Decimal("119000"), Decimal("19000"))
+    assert products == Decimal("100000.00")
+    assert iva == Decimal("15966.39")
+    assert net == Decimal("103033.61")
+
+
+@pytest.mark.django_db
 def test_woo_upsert_promotes_processing(admin_user):
     ensure_system_vendors()
     payload = {

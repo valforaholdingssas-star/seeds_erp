@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { InlineText } from "@/components/ui/InlineText";
 import { MockModeBanner } from "@/components/ui/MockModeBanner";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { formatCOP } from "@/lib/utils";
+import { formatCOP, formatSaleDate } from "@/lib/utils";
 import { useBatchConsole } from "@/features/batch/batchStore";
 
 async function copyText(text: string) {
@@ -48,6 +48,7 @@ type Shipment = {
   tracking_url: string;
   label_url: string;
   shipping_cost: string | null;
+  sale_closed_at: string | null;
   warning: boolean;
   warning_detail: string;
   last_error: string;
@@ -190,6 +191,11 @@ export function ShipmentsPage() {
         ),
       },
       { accessorKey: "sale_external_id", header: "Pedido" },
+      {
+        accessorKey: "sale_closed_at",
+        header: "Fecha venta",
+        cell: ({ getValue }) => formatSaleDate(getValue() as string | null),
+      },
       { accessorKey: "customer_name", header: "Cliente" },
       {
         id: "addr",
@@ -335,9 +341,10 @@ export function ShipmentsPage() {
       },
       {
         accessorKey: "shipping_cost",
-        header: "Costo",
+        header: "Costo Envia",
         cell: ({ getValue }) => (getValue() ? formatCOP(Number(getValue())) : "—"),
-      },      {
+      },
+      {
         id: "actions",
         header: "",
         cell: ({ row }) => {

@@ -9,6 +9,7 @@ class ShipmentSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source="sale.customer_name", read_only=True)
     address_raw = serializers.CharField(source="sale.address_raw", read_only=True)
     city_raw = serializers.CharField(source="sale.city_raw", read_only=True)
+    sale_closed_at = serializers.DateTimeField(source="sale.closed_at", read_only=True)
     qty_dorados = serializers.SerializerMethodField()
     qty_plateados = serializers.SerializerMethodField()
     pack_lines = serializers.SerializerMethodField()
@@ -24,6 +25,7 @@ class ShipmentSerializer(serializers.ModelSerializer):
             "customer_name",
             "address_raw",
             "city_raw",
+            "sale_closed_at",
             "address_mirror",
             "city_mirror",
             "state_mirror",
@@ -57,6 +59,7 @@ class ShipmentSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "sale",
+            "sale_closed_at",
             "geo_city",
             "geo_state_code",
             "address_formatted",
