@@ -129,7 +129,7 @@ export function ExpensesPage() {
     queryKey: ["finance-efe-accounts"],
     queryFn: async () => {
       const { data } = await apiClient.get<Paginated<Account> | Account[]>(
-        "/finance/accounts/efe/?is_leaf=true&page_size=300",
+        "/finance/accounts/efe/?is_leaf=true&page_size=500",
       );
       return Array.isArray(data) ? data : data.results || [];
     },
