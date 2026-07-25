@@ -30,6 +30,8 @@ urlpatterns = [
     path("api/v1/", include("apps.inventory.urls")),
     path("api/v1/", include("apps.accounting.urls")),
     path("api/v1/", include("apps.finance.urls")),
+    path("api/v1/", include("apps.expenses.urls")),
+    path("api/v1/", include("apps.dashboard.urls")),
     path("api/v1/", include("apps.leads.urls")),
     path("api/v1/", include("apps.ai.urls")),
     path("api/v1/", include("apps.analytics.urls")),

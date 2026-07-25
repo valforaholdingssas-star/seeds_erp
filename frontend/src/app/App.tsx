@@ -9,6 +9,8 @@ import {
   RequireInventoryAccess,
   RequireAccountingAccess,
   RequireFinanceAccess,
+  RequireExpensesAccess,
+  RequireDashboardAccess,
 } from "@/features/auth/guards";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { PasswordResetPage } from "@/features/auth/PasswordResetPage";
@@ -35,6 +37,8 @@ import { EfePage } from "@/features/finance/EfePage";
 import { MovementsPage } from "@/features/finance/MovementsPage";
 import { ImportPage } from "@/features/finance/ImportPage";
 import { AuditPage } from "@/features/finance/AuditPage";
+import { ExpensesPage } from "@/features/expenses/ExpensesPage";
+import { ControlDashboardPage } from "@/features/dashboard/ControlDashboardPage";
 import { LeadsPage } from "@/features/leads/LeadsPage";
 import { AiPage } from "@/features/ai/AiPage";
 import { AnalyticsPage } from "@/features/analytics/AnalyticsPage";
@@ -96,6 +100,12 @@ export function App() {
                 <Route path="finance/movements" element={<MovementsPage />} />
                 <Route path="finance/import" element={<ImportPage />} />
                 <Route path="finance/audit" element={<AuditPage />} />
+              </Route>
+              <Route element={<RequireExpensesAccess />}>
+                <Route path="expenses" element={<ExpensesPage />} />
+              </Route>
+              <Route element={<RequireDashboardAccess />}>
+                <Route path="dashboard" element={<ControlDashboardPage />} />
               </Route>
               <Route element={<RequireAdmin />}>
                 <Route path="sellers" element={<SellersPage />} />

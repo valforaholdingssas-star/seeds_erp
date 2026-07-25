@@ -17,7 +17,7 @@ from apps.sales.models import ConsolidatedSale, SaleSource, SaleState
 
 
 # Resultados derivados del P&L (no son cuentas del árbol; se calculan en vivo).
-# Convención de signos: ventas/ingresos (+), costos/gastos desde banco (−).
+# Convención de signos: ventas/ingresos (+), costos/gastos documentados (−).
 # Margen bruto = Ventas + COGS
 # EBITDA     = Ventas + COGS + Admin + Costos op. + Gastos  (sin D&A explícito)
 # NIAT       = EBITDA + Ingreso/Recaudo  (resultado después de recaudo/otros; excluye pasivos)
@@ -189,15 +189,41 @@ def build_efe(year: int) -> dict:
         if ship and "1.2" in matrix:
             matrix["1.2"][mk] += ship
 
-    # Bank movements classified → non-sales leaves
+    # Documented expenses (09) → COGS / admin / costos / gastos (+ atribuciones a 1.3 etc.)
+    # Unit = amortization entry (N=1 if not amortized). Amounts enter as NEGATIVE.
+    from apps.expenses.models import ExpenseAmortizationEntry
+
+    expense_rows = (
+        ExpenseAmortizationEntry.objects.filter(
+            period_year=year,
+            expense__status__feeds_efe=True,
+            efe_account__isnull=False,
+            efe_account__is_leaf=True,
+        )
+        .values("efe_account__code", "period_month")
+        .annotate(total=Sum("amount"))
+    )
+    for row in expense_rows:
+        code = row["efe_account__code"]
+        mk = f"{year:04d}-{int(row['period_month']):02d}"
+        if code in matrix:
+            matrix[code][mk] += -abs(Decimal(row["total"] or 0))
+
+    # Bank movements → only income / liabilities / adjustments (not expense/COGS lines).
+    # Expense/COGS attribution lives in 09; bank egresos are for reconciliation.
+    bank_kinds = [
+        FinancialAccountKind.INGRESO,
+        FinancialAccountKind.PASIVO,
+        FinancialAccountKind.AJUSTE,
+    ]
     movs = (
         BankMovement.objects.filter(
             date__year=year,
             status__in=[MovementStatus.CLASIFICADO, MovementStatus.CONCILIADO],
             financial_account__isnull=False,
             financial_account__is_leaf=True,
+            financial_account__kind__in=bank_kinds,
         )
-        .exclude(financial_account__kind=FinancialAccountKind.VENTAS)
         .values("financial_account__code", "date__month")
         .annotate(total=Sum("value"))
     )
@@ -356,28 +382,61 @@ def efe_drilldown(*, code: str, year: int, month: int) -> dict:
                     }
                 )
 
-    movs = (
-        BankMovement.objects.filter(
-            financial_account=account,
-            date__year=year,
-            date__month=month,
+    from apps.expenses.models import ExpenseAmortizationEntry
+
+    expense_entries = (
+        ExpenseAmortizationEntry.objects.filter(
+            efe_account=account,
+            period_year=year,
+            period_month=month,
+            expense__status__feeds_efe=True,
         )
-        .select_related("bank")
-        .order_by("date")[:500]
+        .select_related("expense", "expense__bank_account")
+        .order_by("expense__expense_date")[:500]
     )
-    movements = [
+    expenses = [
         {
-            "type": "movement",
-            "id": str(m.id),
-            "bank": m.bank.name,
-            "date": m.date.isoformat(),
-            "value": str(m.value),
-            "concept": m.concept,
-            "item": m.item,
-            "is_interbank": m.is_interbank,
+            "type": "expense",
+            "id": str(e.expense_id),
+            "entry_id": str(e.id),
+            "title": e.expense.title,
+            "concept": e.expense.effective_concept,
+            "value": str(-abs(e.amount)),
+            "date": e.expense.expense_date.isoformat(),
+            "bank": e.expense.bank_account.name if e.expense.bank_account_id else "",
         }
-        for m in movs
+        for e in expense_entries
     ]
+
+    bank_kinds = {
+        FinancialAccountKind.INGRESO,
+        FinancialAccountKind.PASIVO,
+        FinancialAccountKind.AJUSTE,
+    }
+    movements = []
+    if account.kind in bank_kinds:
+        movs = (
+            BankMovement.objects.filter(
+                financial_account=account,
+                date__year=year,
+                date__month=month,
+            )
+            .select_related("bank")
+            .order_by("date")[:500]
+        )
+        movements = [
+            {
+                "type": "movement",
+                "id": str(m.id),
+                "bank": m.bank.name,
+                "date": m.date.isoformat(),
+                "value": str(m.value),
+                "concept": m.concept,
+                "item": m.item,
+                "is_interbank": m.is_interbank,
+            }
+            for m in movs
+        ]
     return {
         "code": code,
         "name": account.name,
@@ -385,4 +444,5 @@ def efe_drilldown(*, code: str, year: int, month: int) -> dict:
         "month": month,
         "sales": sales_out,
         "movements": movements,
+        "expenses": expenses,
     }

@@ -24,6 +24,8 @@ MODULE_CATALOG: list[dict[str, str]] = [
     {"key": "inventory", "label": "Inventario"},
     {"key": "accounting", "label": "Contabilidad"},
     {"key": "finance", "label": "Finanzas"},
+    {"key": "expenses", "label": "Gastos"},
+    {"key": "dashboard", "label": "Torre de control"},
     {"key": "integrations", "label": "Eventos / integraciones"},
     {"key": "sellers", "label": "Vendedores"},
     {"key": "payment_methods", "label": "Medios de pago"},
@@ -48,6 +50,7 @@ ROLE_DEFAULT_MODULES: dict[str, list[str]] = {
         "logistics",
         "integrations",
         "accounting",
+        "dashboard",
     ],
     Role.LOGISTICA: [
         "home",
@@ -57,6 +60,7 @@ ROLE_DEFAULT_MODULES: dict[str, list[str]] = {
         "dispatch",
         "inventory",
         "geo",
+        "dashboard",
     ],
     Role.CONTABILIDAD: [
         "home",
@@ -64,6 +68,8 @@ ROLE_DEFAULT_MODULES: dict[str, list[str]] = {
         "analytics",
         "accounting",
         "finance",
+        "expenses",
+        "dashboard",
         "inventory",
     ],
     Role.SUPERVISOR: [
@@ -77,6 +83,8 @@ ROLE_DEFAULT_MODULES: dict[str, list[str]] = {
         "inventory",
         "accounting",
         "finance",
+        "expenses",
+        "dashboard",
         "integrations",
         "geo",
     ],
@@ -90,6 +98,8 @@ ROLE_DEFAULT_MODULES: dict[str, list[str]] = {
         "inventory",
         "accounting",
         "finance",
+        "expenses",
+        "dashboard",
     ],
 }
 
@@ -189,12 +199,20 @@ def _normalize_role_permissions(
                         role_map[str(mod)] = crud
             if "home" not in role_map:
                 role_map["home"] = read_only_crud()
+            # Newly catalogued modules inherit built-in defaults when absent from stored config
+            for mod, crud in base.get(role, {}).items():
+                if mod not in role_map:
+                    role_map[mod] = crud
             base[role] = role_map
 
     # ADMIN locked modules always keep full access
     admin = dict(base.get(Role.ADMIN, {}))
     for locked in ADMIN_LOCKED_MODULES:
         admin[locked] = full_crud()
+    # ADMIN always gets every catalog module
+    for mod in ALL_MODULE_KEYS:
+        if mod not in admin:
+            admin[mod] = full_crud()
     base[Role.ADMIN] = admin
     return base
 

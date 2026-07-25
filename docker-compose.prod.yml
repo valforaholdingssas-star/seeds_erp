@@ -57,6 +57,8 @@ services:
       --timeout 120
       --access-logfile -
       --error-logfile -
+    volumes:
+      - seeds_media_prod:/app/media
     networks:
       - internal
 
@@ -135,6 +137,7 @@ services:
 volumes:
   seeds_pgdata_prod:
   seeds_redis_prod:
+  seeds_media_prod:
 
 networks:
   internal:

@@ -97,3 +97,35 @@ export function RequireFinanceAccess() {
   }
   return <Outlet />;
 }
+
+const EXPENSES_ROLES: UserRole[] = [
+  "ADMIN",
+  "CONTABILIDAD",
+  "SUPERVISOR",
+  "VIEWER",
+];
+
+export function RequireExpensesAccess() {
+  const user = useAuthStore((s) => s.user);
+  if (!user || !EXPENSES_ROLES.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+  return <Outlet />;
+}
+
+const DASHBOARD_ROLES: UserRole[] = [
+  "ADMIN",
+  "CONTABILIDAD",
+  "SUPERVISOR",
+  "VIEWER",
+  "LOGISTICA",
+  "VENTAS",
+];
+
+export function RequireDashboardAccess() {
+  const user = useAuthStore((s) => s.user);
+  if (!user || !DASHBOARD_ROLES.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+  return <Outlet />;
+}

@@ -60,6 +60,8 @@ INSTALLED_APPS = [
     "apps.inventory",
     "apps.accounting.apps.AccountingConfig",
     "apps.finance.apps.FinanceConfig",
+    "apps.expenses.apps.ExpensesConfig",
+    "apps.dashboard.apps.DashboardConfig",
     "apps.leads",
     "apps.ai",
     "apps.analytics",
@@ -127,6 +129,8 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},

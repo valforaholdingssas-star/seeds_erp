@@ -28,6 +28,8 @@ import {
   Landmark,
   ArrowLeftRight,
   Upload,
+  Radar,
+  Banknote,
 } from "lucide-react";
 import { fetchMe } from "@/features/auth/api";
 import { useAuthStore, type UserRole } from "@/features/auth/store";
@@ -75,6 +77,14 @@ const navGroups: NavGroup[] = [
         roles: ALL_ROLES,
         module: "home",
         keywords: ["home", "dashboard"],
+      },
+      {
+        to: "/dashboard",
+        label: "Torre de control",
+        icon: Radar,
+        roles: ALL_ROLES,
+        module: "dashboard",
+        keywords: ["alertas", "salud", "control", "indicadores"],
       },
     ],
   },
@@ -241,6 +251,14 @@ const navGroups: NavGroup[] = [
         roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
         module: "finance",
         keywords: ["validacion", "bancos", "reportes", "cuadre"],
+      },
+      {
+        to: "/expenses",
+        label: "Gastos",
+        icon: Banknote,
+        roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
+        module: "expenses",
+        keywords: ["reembolsos", "iva", "amortizacion", "comprobante"],
       },
     ],
   },
