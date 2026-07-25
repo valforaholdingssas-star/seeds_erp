@@ -207,6 +207,31 @@ def _customer_display_name(raw: str) -> str:
     return name
 
 
+def _clip(value: Any, max_len: int) -> str:
+    text = _scalar_str(value)
+    if max_len > 0 and len(text) > max_len:
+        return text[:max_len]
+    return text
+
+
+def _sanitize_id_number(raw: str) -> str:
+    """Drop Woo JSON / garbage that sometimes lands in the CC column."""
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    if text.startswith("{") or text.startswith("["):
+        return ""
+    if len(text) > 64:
+        return ""
+    # Keep typical document tokens; otherwise clip.
+    return text[:64]
+
+
+def _sanitize_phone(raw: str) -> str:
+    text = (raw or "").strip()
+    return text[:64]
+
+
 def _dec(value: Any) -> Decimal:
     if value is None or value == "":
         return Decimal("0")
@@ -458,34 +483,34 @@ def validate_row(row: dict[str, Any], mapping: dict[str, str | None], row_num: i
         tracking_url = f"https://envia.com/es-CO/tracking?label={tracking_number}"
 
     payload = {
-        "external_id": external_id,
+        "external_id": _clip(external_id, 64),
         "source": source,
-        "customer_name": customer_name,
-        "email": get("email"),
-        "phone": get("phone"),
-        "id_number": get("id_number"),
-        "address_raw": get("address_raw"),
-        "city_raw": get("city_raw"),
-        "state_raw": get("state_raw"),
+        "customer_name": _clip(customer_name, 255),
+        "email": _clip(get("email"), 254),
+        "phone": _sanitize_phone(get("phone")),
+        "id_number": _sanitize_id_number(get("id_number")),
+        "address_raw": _clip(get("address_raw"), 512),
+        "city_raw": _clip(get("city_raw"), 128),
+        "state_raw": _clip(get("state_raw"), 128),
         "total_value": total_value,
         "amount_shipping": amount_shipping,
-        "payment_account": get("payment_account"),
-        "commercial_raw": commercial_raw,
+        "payment_account": _clip(get("payment_account"), 128),
+        "commercial_raw": _clip(commercial_raw, 128),
         "qty_dorados": qty_dorados,
         "qty_plateados": qty_plateados,
-        "tipo_dorados": normalize_kit_type(get("tipo_dorados")),
-        "tipo_plateados": normalize_kit_type(get("tipo_plateados")),
-        "status": status,
+        "tipo_dorados": _clip(normalize_kit_type(get("tipo_dorados")), 128),
+        "tipo_plateados": _clip(normalize_kit_type(get("tipo_plateados")), 128),
+        "status": status[:64],
         "closed_at": _parse_closed_at(get("closed_at")),
         "order_notes": get("order_notes"),
-        "income_source": source,
+        "income_source": _clip(source, 32),
         "fulfillment_type": fulfillment,
         "requires_shipping": fulfillment == "ENVIA",
-        "tracking_number": tracking_number,
-        "tracking_url": tracking_url,
+        "tracking_number": _clip(tracking_number, 128),
+        "tracking_url": _clip(tracking_url, 512),
         "shipping_cost": shipping_cost,
-        "label_url": label_url,
-        "carrier": carrier,
+        "label_url": _clip(label_url, 200),
+        "carrier": _clip(carrier, 64),
         "sent_at": sent_at,
         "shipment_status": shipment_status,
     }
@@ -521,7 +546,6 @@ def dry_run_xlsx(data: bytes, mapping: dict[str, str | None] | None = None) -> d
     return dry_run_table(headers, rows, mapping=mapping)
 
 
-@transaction.atomic
 def commit_table(
     headers: list[str],
     rows: list[dict[str, Any]],
@@ -542,57 +566,87 @@ def commit_table(
         data = item["data"]
         source = data["source"]
         model = SOURCE_MODELS[source]
-        existing = model.objects.filter(external_id=data["external_id"]).first()
-        if existing and on_duplicate == "skip":
-            skipped += 1
-            details.append({"row": item["row"], "status": "skipped", "external_id": data["external_id"]})
-            continue
+        try:
+            with transaction.atomic():
+                existing = model.objects.filter(external_id=data["external_id"]).first()
+                if existing and on_duplicate == "skip":
+                    skipped += 1
+                    details.append(
+                        {
+                            "row": item["row"],
+                            "status": "skipped",
+                            "external_id": data["external_id"],
+                        }
+                    )
+                    continue
 
-        defaults = {
-            "deal_name": data["customer_name"],
-            "closed_at": data["closed_at"],
-            "total_value": data["total_value"],
-            "amount_shipping": data["amount_shipping"],
-            "payment_account": data["payment_account"],
-            "payment_method": resolve_payment_method(data.get("payment_account") or "", actor=actor),
-            "income_source": data["income_source"],
-            "status": data["status"],
-            "stage": "Import CSV",
-            "commercial_raw": data["commercial_raw"],
-            "customer_name": data["customer_name"],
-            "email": data["email"],
-            "phone": data["phone"],
-            "id_number": data["id_number"],
-            "address_raw": data["address_raw"],
-            "city_raw": data["city_raw"],
-            "state_raw": data["state_raw"],
-            "qty_dorados": data["qty_dorados"],
-            "qty_plateados": data["qty_plateados"],
-            "tipo_dorados": data.get("tipo_dorados") or "",
-            "tipo_plateados": data.get("tipo_plateados") or "",
-            "order_notes": data["order_notes"],
-            "requires_shipping": data["requires_shipping"],
-            "fulfillment_type": data.get("fulfillment_type") or "ENVIA",
-            "extra": {"imported": True},
-        }
-        apply_fulfillment(defaults)
-        if defaults["payment_method"]:
-            defaults["payment_account"] = defaults["payment_method"].name
-        if existing and on_duplicate == "update":
-            for k, v in defaults.items():
-                setattr(existing, k, v)
-            existing.save()
-            source_sale = existing
-            updated += 1
-            status = "updated"
-        else:
-            source_sale = model.objects.create(external_id=data["external_id"], **defaults)
-            created += 1
-            status = "created"
+                defaults = {
+                    "deal_name": data["customer_name"],
+                    "closed_at": data["closed_at"],
+                    "total_value": data["total_value"],
+                    "amount_shipping": data["amount_shipping"],
+                    "payment_account": data["payment_account"],
+                    "payment_method": resolve_payment_method(
+                        data.get("payment_account") or "", actor=actor
+                    ),
+                    "income_source": data["income_source"],
+                    "status": data["status"],
+                    "stage": "Import CSV",
+                    "commercial_raw": data["commercial_raw"],
+                    "customer_name": data["customer_name"],
+                    "email": data["email"],
+                    "phone": data["phone"],
+                    "id_number": data["id_number"],
+                    "address_raw": data["address_raw"],
+                    "city_raw": data["city_raw"],
+                    "state_raw": data["state_raw"],
+                    "qty_dorados": data["qty_dorados"],
+                    "qty_plateados": data["qty_plateados"],
+                    "tipo_dorados": data.get("tipo_dorados") or "",
+                    "tipo_plateados": data.get("tipo_plateados") or "",
+                    "order_notes": data["order_notes"],
+                    "requires_shipping": data["requires_shipping"],
+                    "fulfillment_type": data.get("fulfillment_type") or "ENVIA",
+                    "extra": {"imported": True},
+                }
+                apply_fulfillment(defaults)
+                if defaults["payment_method"]:
+                    defaults["payment_account"] = defaults["payment_method"].name
+                if existing and on_duplicate == "update":
+                    for k, v in defaults.items():
+                        setattr(existing, k, v)
+                    existing.save()
+                    source_sale = existing
+                    updated += 1
+                    status = "updated"
+                else:
+                    source_sale = model.objects.create(
+                        external_id=data["external_id"], **defaults
+                    )
+                    created += 1
+                    status = "created"
 
-        promote_to_consolidated(source_sale, source=source, actor=actor)
-        _apply_historical_shipment(source_sale, source=source, data=data, actor=actor)
-        details.append({"row": item["row"], "status": status, "external_id": data["external_id"]})
+                promote_to_consolidated(source_sale, source=source, actor=actor)
+                _apply_historical_shipment(
+                    source_sale, source=source, data=data, actor=actor
+                )
+                details.append(
+                    {
+                        "row": item["row"],
+                        "status": status,
+                        "external_id": data["external_id"],
+                    }
+                )
+        except Exception as exc:  # noqa: BLE001 — isolate bad historical rows
+            rejected += 1
+            details.append(
+                {
+                    "row": item["row"],
+                    "status": "rejected",
+                    "external_id": data.get("external_id"),
+                    "errors": [str(exc)],
+                }
+            )
 
     log_audit_event(
         actor=actor,
@@ -617,7 +671,6 @@ def commit_table(
     }
 
 
-@transaction.atomic
 def commit_csv(
     text: str,
     *,
@@ -631,7 +684,6 @@ def commit_csv(
     )
 
 
-@transaction.atomic
 def commit_xlsx(
     data: bytes,
     *,
