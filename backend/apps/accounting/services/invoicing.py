@@ -70,14 +70,19 @@ def ensure_invoice_for_sale(sale, *, actor=None) -> Invoice | None:
 
 
 @transaction.atomic
-def sync_customer_to_alegra(customer: Customer, *, actor=None) -> Customer:
-    if customer.alegra_id:
+def sync_customer_to_alegra(customer: Customer, *, actor=None, force: bool = False) -> Customer:
+    if customer.alegra_id and customer.alegra_synced and not force:
+        return customer
+    if customer.alegra_id and not force:
         customer.alegra_synced = True
         customer.save(update_fields=["alegra_synced", "updated_at"])
         return customer
     body = alegra_client.create_or_find_contact(customer)
-    customer.alegra_id = str(body.get("id") or "")
-    customer.alegra_synced = bool(customer.alegra_id)
+    alegra_id = str(body.get("id") or "").strip()
+    if not alegra_id:
+        raise RuntimeError(f"Alegra no devolvió id de contacto: {body}")
+    customer.alegra_id = alegra_id
+    customer.alegra_synced = True
     customer.save(update_fields=["alegra_id", "alegra_synced", "updated_at"])
     log_audit_event(
         actor=actor,
@@ -88,6 +93,21 @@ def sync_customer_to_alegra(customer: Customer, *, actor=None) -> Customer:
     )
     return customer
 
+
+def bulk_sync_customers_to_alegra(ids: list, *, actor=None) -> dict:
+    ok = 0
+    errors: list[dict] = []
+    for cid in ids:
+        customer = Customer.objects.filter(id=cid).first()
+        if not customer:
+            errors.append({"id": str(cid), "detail": "Cliente no encontrado"})
+            continue
+        try:
+            sync_customer_to_alegra(customer, actor=actor)
+            ok += 1
+        except Exception as exc:
+            errors.append({"id": str(customer.id), "name": customer.name, "detail": str(exc)[:500]})
+    return {"synced": ok, "failed": len(errors), "errors": errors}
 
 @transaction.atomic
 def issue_invoice(invoice_id, *, actor=None) -> Invoice:

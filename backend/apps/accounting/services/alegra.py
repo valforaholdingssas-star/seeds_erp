@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 def _alegra_creds() -> tuple[str, str]:
-    email = cfg.get("alegra.email", "") or ""
-    token = cfg.get_secret("alegra.token") or ""
+    email = (cfg.get("alegra.email", "") or "").strip()
+    token = (cfg.get_secret("alegra.token") or "").strip()
     return str(email), str(token)
 
 
@@ -65,14 +65,31 @@ def _log(
 def create_or_find_contact(customer) -> dict[str, Any]:
     """POST /contacts or mock. Returns {id: alegra_id, ...}."""
     auth = _auth()
-    payload = {
-        "name": customer.name,
-        "identification": customer.id_number,
-        "email": customer.email or None,
-        "phonePrimary": customer.phone or None,
-        "address": {"address": customer.address, "city": customer.city},
+    id_type = (getattr(customer, "id_type", None) or "CC").strip().upper() or "CC"
+    id_number = (customer.id_number or "").strip()
+    payload: dict[str, Any] = {
+        "name": (customer.name or id_number or "Cliente").strip(),
+        "identification": id_number or None,
+        "identificationObject": {
+            "type": id_type,
+            "number": id_number,
+        },
+        "email": (customer.email or "").strip() or None,
+        "phonePrimary": (customer.phone or "").strip() or None,
+        "address": {
+            "address": (customer.address or "").strip() or None,
+            "city": (customer.city or "").strip() or None,
+        },
         "type": ["client"],
+        "status": "active",
     }
+    # Drop empty nested values Alegra rejects
+    if not payload["address"]["address"] and not payload["address"]["city"]:
+        payload.pop("address", None)
+    else:
+        payload["address"] = {
+            k: v for k, v in payload["address"].items() if v
+        }
     url = f"{_alegra_base_url()}/contacts"
     started = time.monotonic()
 
@@ -96,11 +113,24 @@ def create_or_find_contact(customer) -> dict[str, Any]:
     limiter.acquire(timeout=60)
     with httpx.Client(timeout=45.0, auth=auth) as client:
         # search first
-        search = client.get(f"{url}", params={"identification": customer.id_number})
-        if search.is_success:
-            data = search.json()
-            if isinstance(data, list) and data:
-                return data[0] if isinstance(data[0], dict) else {"id": data[0]}
+        if id_number:
+            search = client.get(url, params={"identification": id_number})
+            if search.is_success:
+                data = search.json()
+                if isinstance(data, list) and data:
+                    found = data[0] if isinstance(data[0], dict) else {"id": data[0]}
+                    _log(
+                        method="GET",
+                        url=url,
+                        request_body={"identification": id_number},
+                        response_status=search.status_code,
+                        response_body=found if isinstance(found, dict) else {"raw": str(found)},
+                        success=True,
+                        latency_ms=int((time.monotonic() - started) * 1000),
+                        ref_type="Customer",
+                        ref_id=str(customer.id),
+                    )
+                    return found
         resp = client.post(url, json=payload)
     latency = int((time.monotonic() - started) * 1000)
     try:
@@ -297,9 +327,14 @@ def ping_alegra() -> dict[str, Any]:
             }
         return {
             "ok": False,
-            "message": f"Alegra HTTP {res.status_code}: {res.text[:200]}",
+            "message": (
+                f"Alegra HTTP {res.status_code}: {res.text[:200]}. "
+                "Revisa email + token API (Configuración → Alegra en Alegra.com → "
+                "API / Integraciones). Guarda antes de probar. No uses la contraseña "
+                "de login: debe ser el token de API."
+            ),
             "status": res.status_code,
-            "mode": "live",
+            "mode": "error",
         }
     except Exception as exc:
         return {"ok": False, "message": f"Error Alegra: {exc}", "mode": "live"}

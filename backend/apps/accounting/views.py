@@ -14,6 +14,7 @@ from apps.accounting.serializers import (
     RefundSerializer,
 )
 from apps.accounting.services.invoicing import (
+    bulk_sync_customers_to_alegra,
     confirm_void,
     create_refund,
     issue_invoice,
@@ -36,17 +37,29 @@ class CustomerViewSet(viewsets.ModelViewSet):
     ordering_fields = ["name", "created_at"]
 
     def get_permissions(self):
-        self.module_roles = ["CONTABILIDAD", "SUPERVISOR", "VIEWER", "VENTAS"]
+        self.module_roles = ["CONTABILIDAD", "SUPERVISOR", "VIEWER", "VENTAS", "ADMIN"]
         if self.action in {"list", "retrieve"}:
             return [IsModuleRole()]
-        self.module_roles = ["CONTABILIDAD"]
+        self.module_roles = ["CONTABILIDAD", "SUPERVISOR", "ADMIN"]
         return [IsModuleRole()]
 
     @action(detail=True, methods=["post"], url_path="sync-alegra")
     def sync_alegra(self, request, pk=None):
-        customer = sync_customer_to_alegra(self.get_object(), actor=request.user)
+        try:
+            customer = sync_customer_to_alegra(self.get_object(), actor=request.user)
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=400)
         return Response(CustomerSerializer(customer).data)
 
+    @action(detail=False, methods=["post"], url_path="bulk-sync-alegra")
+    def bulk_sync_alegra(self, request):
+        ser = IdsSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        result = bulk_sync_customers_to_alegra(
+            ser.validated_data["ids"], actor=request.user
+        )
+        status_code = 200 if result["failed"] == 0 else 207
+        return Response(result, status=status_code)
 
 class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     permission_module = "accounting"

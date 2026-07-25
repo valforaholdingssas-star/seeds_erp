@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiClient } from "@/lib/apiClient";
 import { DataTable } from "@/components/data/DataTable";
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { MockModeBanner } from "@/components/ui/MockModeBanner";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 type Customer = {
@@ -21,27 +23,111 @@ type Customer = {
 
 type Paginated<T> = { count: number; results: T[] };
 
+type BulkResult = {
+  synced: number;
+  failed: number;
+  errors: { id: string; name?: string; detail: string }[];
+};
+
+function errDetail(err: unknown): string {
+  const ax = err as { response?: { data?: { detail?: string | object } }; message?: string };
+  const d = ax.response?.data?.detail;
+  if (typeof d === "string") return d;
+  if (d && typeof d === "object") return JSON.stringify(d);
+  return ax.message || "Error desconocido";
+}
+
 export function CustomersPage() {
   const qc = useQueryClient();
+  const [selected, setSelected] = useState<Customer[]>([]);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "pending" | "synced">("all");
+
   const customers = useQuery({
-    queryKey: ["customers"],
+    queryKey: ["customers", filter],
     queryFn: async () => {
+      const q = new URLSearchParams({ page_size: "500" });
+      if (filter === "pending") q.set("alegra_synced", "false");
+      if (filter === "synced") q.set("alegra_synced", "true");
       const { data } = await apiClient.get<Paginated<Customer> | Customer[]>(
-        "/accounting/customers/",
+        `/accounting/customers/?${q}`,
       );
-      return Array.isArray(data) ? data : data.results;
+      return Array.isArray(data) ? data : data.results || [];
     },
   });
 
-  const sync = useMutation({
+  const syncOne = useMutation({
     mutationFn: async (id: string) => {
-      await apiClient.post(`/accounting/customers/${id}/sync-alegra/`);
+      const { data } = await apiClient.post<Customer>(
+        `/accounting/customers/${id}/sync-alegra/`,
+      );
+      return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["customers"] }),
+    onSuccess: (data) => {
+      setErr(null);
+      setMsg(
+        data.alegra_synced
+          ? `Sincronizado: ${data.name} · Alegra ${data.alegra_id}`
+          : `Respuesta sin id Alegra para ${data.name}`,
+      );
+      void qc.invalidateQueries({ queryKey: ["customers"] });
+    },
+    onError: (e) => {
+      setMsg(null);
+      setErr(errDetail(e));
+    },
+  });
+
+  const syncBulk = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { data } = await apiClient.post<BulkResult>(
+        "/accounting/customers/bulk-sync-alegra/",
+        { ids },
+      );
+      return data;
+    },
+    onSuccess: (data) => {
+      setSelected([]);
+      const failHint =
+        data.failed > 0
+          ? ` · Fallidos: ${data.errors
+              .slice(0, 3)
+              .map((e) => e.name || e.id)
+              .join(", ")}${data.errors.length > 3 ? "…" : ""}`
+          : "";
+      if (data.failed === 0) {
+        setErr(null);
+        setMsg(`Sincronizados ${data.synced} cliente(s) con Alegra.`);
+      } else {
+        setMsg(`Sincronizados ${data.synced}.`);
+        setErr(
+          `${data.failed} fallaron${failHint}. ${data.errors[0]?.detail || ""}`,
+        );
+      }
+      void qc.invalidateQueries({ queryKey: ["customers"] });
+    },
+    onError: (e) => {
+      setMsg(null);
+      setErr(errDetail(e));
+    },
   });
 
   const columns = useMemo<ColumnDef<Customer, unknown>[]>(
     () => [
+      {
+        id: "select",
+        header: "",
+        cell: ({ row }) => (
+          <input
+            type="checkbox"
+            checked={row.getIsSelected()}
+            onChange={row.getToggleSelectedHandler()}
+            className="h-4 w-4 accent-green-900"
+            onClick={(e) => e.stopPropagation()}
+          />
+        ),
+      },
       { accessorKey: "name", header: "Nombre" },
       {
         id: "doc",
@@ -68,15 +154,25 @@ export function CustomersPage() {
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => sync.mutate(row.original.id)}
+            disabled={syncOne.isPending}
+            onClick={(e) => {
+              e.stopPropagation();
+              setErr(null);
+              setMsg(null);
+              syncOne.mutate(row.original.id);
+            }}
           >
-            Sincronizar
+            {syncOne.isPending && syncOne.variables === row.original.id
+              ? "…"
+              : "Sincronizar"}
           </Button>
         ),
       },
     ],
-    [sync],
+    [syncOne],
   );
+
+  const pendingCount = (customers.data || []).filter((c) => !c.alegra_synced).length;
 
   return (
     <div className="space-y-3">
@@ -95,12 +191,57 @@ export function CustomersPage() {
         }
       />
 
+      <MockModeBanner />
+
+      {msg ? <Alert variant="success">{msg}</Alert> : null}
+      {err ? <Alert variant="error">{err}</Alert> : null}
+
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            ["all", "Todos"],
+            ["pending", `Pendientes${pendingCount ? ` (${pendingCount})` : ""}`],
+            ["synced", "Sincronizados"],
+          ] as const
+        ).map(([k, label]) => (
+          <Button
+            key={k}
+            type="button"
+            size="sm"
+            variant={filter === k ? "primary-dark" : "ghost"}
+            onClick={() => setFilter(k)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+
       <DataTable
         data={customers.data || []}
         columns={columns}
         searchableKeys={["name", "id_number", "email", "city"]}
         emptyTitle="Sin clientes"
         emptyDescription="Aparecen al promover ventas al consolidado."
+        onSelectionChange={setSelected}
+        bulkActions={
+          selected.length > 0 ? (
+            <Button
+              type="button"
+              size="sm"
+              disabled={syncBulk.isPending}
+              onClick={() => {
+                setErr(null);
+                setMsg(null);
+                syncBulk.mutate(selected.map((s) => s.id));
+              }}
+            >
+              {syncBulk.isPending
+                ? "Sincronizando…"
+                : `Sincronizar Alegra (${selected.length})`}
+            </Button>
+          ) : null
+        }
+        hint="Selecciona varios clientes para sincronizarlos masivamente con Alegra."
       />
     </div>
   );
