@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiClient } from "@/lib/apiClient";
 import { DataTable } from "@/components/data/DataTable";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { MockModeBanner } from "@/components/ui/MockModeBanner";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PaginationBar } from "@/components/ui/PaginationBar";
 
 type Customer = {
   id: string;
@@ -50,17 +51,40 @@ export function CustomersPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "pending" | "synced">("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
+  useEffect(() => {
+    setPage(1);
+    setSelected([]);
+  }, [filter]);
 
   const customers = useQuery({
-    queryKey: ["customers", filter],
+    queryKey: ["customers", filter, page, pageSize],
     queryFn: async () => {
-      const q = new URLSearchParams({ page_size: "500" });
+      const q = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+      });
       if (filter === "pending") q.set("alegra_synced", "false");
       if (filter === "synced") q.set("alegra_synced", "true");
-      const { data } = await apiClient.get<Paginated<Customer> | Customer[]>(
+      const { data } = await apiClient.get<Paginated<Customer>>(
         `/accounting/customers/?${q}`,
       );
-      return Array.isArray(data) ? data : data.results || [];
+      return {
+        results: data.results || [],
+        count: data.count ?? 0,
+      };
+    },
+  });
+
+  const pendingMeta = useQuery({
+    queryKey: ["customers", "pending-count"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<Paginated<Customer>>(
+        "/accounting/customers/?alegra_synced=false&page_size=1",
+      );
+      return data.count ?? 0;
     },
   });
 
@@ -231,7 +255,9 @@ export function CustomersPage() {
     [syncOne],
   );
 
-  const pendingCount = (customers.data || []).filter((c) => !c.alegra_synced).length;
+  const rows = customers.data?.results || [];
+  const totalCount = customers.data?.count || 0;
+  const pendingCount = pendingMeta.data ?? 0;
 
   return (
     <div className="space-y-3">
@@ -292,8 +318,23 @@ export function CustomersPage() {
         ))}
       </div>
 
+      <PaginationBar
+        page={page}
+        pageSize={pageSize}
+        total={totalCount}
+        onPageChange={(p) => {
+          setPage(p);
+          setSelected([]);
+        }}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+          setSelected([]);
+        }}
+      />
+
       <DataTable
-        data={customers.data || []}
+        data={rows}
         columns={columns}
         searchableKeys={["name", "id_number", "email", "city"]}
         emptyTitle="Sin clientes"
