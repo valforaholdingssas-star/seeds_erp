@@ -31,6 +31,7 @@ import {
   Radar,
   Banknote,
   HandCoins,
+  FileWarning,
 } from "lucide-react";
 import { fetchMe } from "@/features/auth/api";
 import { useAuthStore, type UserRole } from "@/features/auth/store";
@@ -268,6 +269,14 @@ const navGroups: NavGroup[] = [
         roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
         module: "expenses",
         keywords: ["reembolsos", "iva", "amortizacion", "comprobante"],
+      },
+      {
+        to: "/expenses/nominales",
+        label: "Gastos nominales",
+        icon: FileWarning,
+        roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR"],
+        module: "expenses",
+        keywords: ["terceros", "no contable", "a nombre de", "contador"],
       },
     ],
   },

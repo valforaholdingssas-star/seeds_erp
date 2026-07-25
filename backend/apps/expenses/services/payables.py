@@ -110,8 +110,13 @@ def create_payable(
     bank_account_id=None,
     efe_account_id=None,
     responsible_id=None,
+    iva_discountable=None,
+    nature: str = "EMPRESA",
+    on_behalf_of: str = "",
     actor=None,
 ) -> Expense:
+    from apps.expenses.models import ExpenseNature
+
     key = (
         "REEMBOLSOS_POR_PAGAR"
         if kind == "reembolso"
@@ -129,14 +134,23 @@ def create_payable(
     if amount_dec <= 0:
         raise TransitionError("El monto debe ser mayor a 0.")
 
+    nature_val = nature if nature in ExpenseNature.values else ExpenseNature.EMPRESA
+    efe_id = None if nature_val == ExpenseNature.NOMINAL else efe_account_id
+    iva = None
+    if iva_discountable not in (None, ""):
+        iva = Decimal(str(iva_discountable))
+
     return Expense.objects.create(
         title=title.strip(),
         concept=(concept or title).strip(),
         amount=amount_dec,
         expense_date=exp_date,
         bank_account_id=bank_account_id or None,
-        efe_account_id=efe_account_id or None,
+        efe_account_id=efe_id or None,
         responsible_id=responsible_id or None,
+        iva_discountable=iva,
+        nature=nature_val,
+        on_behalf_of=(on_behalf_of or "").strip(),
         status=status,
         created_by=actor,
     )

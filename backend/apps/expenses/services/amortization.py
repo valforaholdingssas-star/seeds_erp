@@ -60,7 +60,13 @@ def regenerate_amortization(
     ExpenseAmortizationEntry.objects.filter(expense=expense).delete()
 
     status = expense.status
-    if not status or not status.feeds_efe or not expense.efe_account_id:
+    if (
+        not status
+        or not status.feeds_efe
+        or not expense.efe_account_id
+        or getattr(expense, "nature", None) == "NOMINAL"
+        or not getattr(expense, "is_company", True)
+    ):
         return {"entries": 0, "closed_months": [], "cleared": True}
 
     n = amortization_periods(expense)

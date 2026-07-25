@@ -55,6 +55,7 @@ export function PayablesPage() {
     amount: "",
     expense_date: new Date().toISOString().slice(0, 10),
     concept: "",
+    iva_discountable: "",
   });
   const [payForm, setPayForm] = useState({
     payment_date: new Date().toISOString().slice(0, 10),
@@ -104,10 +105,12 @@ export function PayablesPage() {
         amount: form.amount,
         expense_date: form.expense_date,
         concept: form.concept || form.title,
+        iva_discountable: form.iva_discountable || null,
+        nature: "EMPRESA",
       });
     },
     onSuccess: () => {
-      setForm((f) => ({ ...f, title: "", amount: "", concept: "" }));
+      setForm((f) => ({ ...f, title: "", amount: "", concept: "", iva_discountable: "" }));
       setOkMsg(
         createKind === "reembolso"
           ? "Reembolso registrado en la cola."
@@ -314,6 +317,17 @@ export function PayablesPage() {
               min="0"
               value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            />
+          </div>
+          <div>
+            <FieldLabel>IVA descontable</FieldLabel>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.iva_discountable}
+              onChange={(e) => setForm({ ...form, iva_discountable: e.target.value })}
+              placeholder="0.00"
             />
           </div>
           <div>

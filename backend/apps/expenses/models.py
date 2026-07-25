@@ -16,6 +16,17 @@ class AttachmentKind(models.TextChoices):
     OTHER = "OTHER", "Otro"
 
 
+class ExpenseNature(models.TextChoices):
+    """
+    EMPRESA: gasto real de Seeds → puede alimentar EFE / contabilidad.
+    NOMINAL: facturado o tramitado a nombre de la empresa pero no es de Seeds
+    (uso del contador / terceros). Nunca entra al EFE ni a la contabilidad Seeds.
+    """
+
+    EMPRESA = "EMPRESA", "De la empresa"
+    NOMINAL = "NOMINAL", "Nominal (no contable Seeds)"
+
+
 class ExpenseStatus(BaseModel):
     key = models.CharField(max_length=64, unique=True)
     label = models.CharField(max_length=128)
@@ -63,6 +74,14 @@ class Expense(BaseModel):
         choices=AccountingAttribution.choices,
         blank=True,
     )
+    nature = models.CharField(
+        max_length=16,
+        choices=ExpenseNature.choices,
+        default=ExpenseNature.EMPRESA,
+        db_index=True,
+    )
+    # A nombre de quién es realmente el gasto cuando nature=NOMINAL
+    on_behalf_of = models.CharField(max_length=255, blank=True)
     status = models.ForeignKey(
         ExpenseStatus,
         on_delete=models.PROTECT,
@@ -111,12 +130,17 @@ class Expense(BaseModel):
         ordering = ["-expense_date", "-created_at"]
         indexes = [
             models.Index(fields=["status", "expense_date"]),
+            models.Index(fields=["nature", "expense_date"]),
             models.Index(fields=["reconciled", "expense_date"]),
             models.Index(fields=["iva_already_discounted"]),
         ]
 
     def __str__(self) -> str:
         return f"{self.title} ({self.amount})"
+
+    @property
+    def is_company(self) -> bool:
+        return self.nature == ExpenseNature.EMPRESA
 
     @property
     def effective_concept(self) -> str:

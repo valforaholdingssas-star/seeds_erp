@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from apps.expenses.models import AttachmentKind, Expense, ExpenseStatus
+from apps.expenses.models import AttachmentKind, Expense, ExpenseNature, ExpenseStatus
 from apps.expenses.services.amortization import regenerate_amortization
 
 
@@ -10,6 +10,10 @@ class TransitionError(ValueError):
 
 def validate_feeds_efe_transition(expense: Expense) -> list[str]:
     errors: list[str] = []
+    if expense.nature == ExpenseNature.NOMINAL:
+        errors.append(
+            "Los gastos nominales no alimentan el EFE ni la contabilidad de Seeds."
+        )
     if not expense.efe_account_id:
         errors.append("Se requiere cuenta EFE atribuida.")
     elif expense.efe_account and not expense.efe_account.is_leaf:
@@ -20,10 +24,6 @@ def validate_feeds_efe_transition(expense: Expense) -> list[str]:
         errors.append("Se requiere fecha del gasto.")
     if not expense.bank_account_id:
         errors.append("Se requiere cuenta bancaria.")
-    has_proof = expense.attachments.filter(kind=AttachmentKind.PAYMENT_PROOF).exists()
-    if not has_proof:
-        # Spec: warning by default; we soft-warn via warnings list, not hard block
-        pass
     return errors
 
 
@@ -37,6 +37,11 @@ def transition_expense(
     warnings: list[str] = []
     if not status.active:
         raise TransitionError("El estado destino no está activo.")
+
+    if expense.nature == ExpenseNature.NOMINAL and status.feeds_efe:
+        raise TransitionError(
+            "Un gasto nominal no puede pasar a un estado que alimenta el EFE."
+        )
 
     if status.feeds_efe:
         errors = validate_feeds_efe_transition(expense)
@@ -58,10 +63,9 @@ def transition_expense(
         expense.approved_by = actor
     expense.save(update_fields=["status", "approved_by", "updated_at"])
 
-    if status.feeds_efe:
+    if status.feeds_efe and expense.nature == ExpenseNature.EMPRESA:
         regenerate_amortization(expense, allow_closed=allow_closed)
     else:
-        # Leaving feeds_efe clears future EFE imputations
         regenerate_amortization(expense, allow_closed=True)
 
     return expense, warnings

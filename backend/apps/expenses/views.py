@@ -43,6 +43,7 @@ MAX_UPLOAD_BYTES = 12 * 1024 * 1024
 class ExpenseFilter(filters.FilterSet):
     status_key = filters.CharFilter(field_name="status__key")
     feeds_efe = filters.BooleanFilter(field_name="status__feeds_efe")
+    nature = filters.CharFilter(field_name="nature")
     date_from = filters.DateFilter(field_name="expense_date", lookup_expr="gte")
     date_to = filters.DateFilter(field_name="expense_date", lookup_expr="lte")
     q = filters.CharFilter(method="filter_q")
@@ -60,6 +61,7 @@ class ExpenseFilter(filters.FilterSet):
             "iva_already_discounted",
             "amortize",
             "feeds_efe",
+            "nature",
         ]
 
     def filter_q(self, qs, name, value):
@@ -68,6 +70,7 @@ class ExpenseFilter(filters.FilterSet):
         return qs.filter(
             Q(title__icontains=value)
             | Q(concept__icontains=value)
+            | Q(on_behalf_of__icontains=value)
             | Q(efe_account__full_label__icontains=value)
         )
 
@@ -239,6 +242,9 @@ class ExpenseViewSet(viewsets.ModelViewSet):
                     bank_account_id=data.get("bank_account"),
                     efe_account_id=data.get("efe_account"),
                     responsible_id=data.get("responsible"),
+                    iva_discountable=data.get("iva_discountable"),
+                    nature=data.get("nature") or "EMPRESA",
+                    on_behalf_of=data.get("on_behalf_of") or "",
                     actor=request.user,
                 )
             except TransitionError as exc:
@@ -251,7 +257,8 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
         qs = self.filter_queryset(
             self.get_queryset().filter(
-                status__key__in=["REEMBOLSOS_POR_PAGAR", "CUENTAS_POR_PAGAR"]
+                status__key__in=["REEMBOLSOS_POR_PAGAR", "CUENTAS_POR_PAGAR"],
+                nature="EMPRESA",
             )
         )
         kind = request.query_params.get("kind")

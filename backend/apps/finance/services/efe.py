@@ -197,6 +197,7 @@ def build_efe(year: int) -> dict:
         ExpenseAmortizationEntry.objects.filter(
             period_year=year,
             expense__status__feeds_efe=True,
+            expense__nature="EMPRESA",
             efe_account__isnull=False,
             efe_account__is_leaf=True,
         )
@@ -390,6 +391,7 @@ def efe_drilldown(*, code: str, year: int, month: int) -> dict:
             period_year=year,
             period_month=month,
             expense__status__feeds_efe=True,
+            expense__nature="EMPRESA",
         )
         .select_related("expense", "expense__bank_account")
         .order_by("expense__expense_date")[:500]

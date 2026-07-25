@@ -74,6 +74,8 @@ export function ExpensesPage() {
     bank_account: "",
     efe_account: "",
     status: "",
+    nature: "EMPRESA",
+    on_behalf_of: "",
     amortize: false,
     amortization_months: "",
     iva_discountable: "",
@@ -91,9 +93,9 @@ export function ExpensesPage() {
   });
 
   const expenses = useQuery({
-    queryKey: ["expenses", statusKeyFilter],
+    queryKey: ["expenses", statusKeyFilter, "EMPRESA"],
     queryFn: async () => {
-      const q = new URLSearchParams({ page_size: "300" });
+      const q = new URLSearchParams({ page_size: "300", nature: "EMPRESA" });
       if (statusKeyFilter) q.set("status_key", statusKeyFilter);
       const { data } = await apiClient.get<Paginated<Expense> | Expense[]>(
         `/expenses/?${q}`,
@@ -119,7 +121,7 @@ export function ExpensesPage() {
     enabled: tab === "iva",
     queryFn: async () => {
       const { data } = await apiClient.get<{ total_iva: string; results: Expense[] }>(
-        "/expenses/iva/?pending=true",
+        "/expenses/iva/?pending=true&nature=EMPRESA",
       );
       return data;
     },
@@ -168,18 +170,34 @@ export function ExpensesPage() {
         amount: form.amount,
         expense_date: form.expense_date,
         bank_account: form.bank_account || null,
-        efe_account: form.efe_account || null,
+        efe_account: form.nature === "NOMINAL" ? null : form.efe_account || null,
+        nature: form.nature,
+        on_behalf_of: form.on_behalf_of,
         status,
-        amortize: form.amortize,
-        amortization_months: form.amortization_months
-          ? Number(form.amortization_months)
-          : null,
+        amortize: form.nature === "EMPRESA" ? form.amortize : false,
+        amortization_months:
+          form.nature === "EMPRESA" && form.amortization_months
+            ? Number(form.amortization_months)
+            : null,
         iva_discountable: form.iva_discountable || null,
       });
     },
     onSuccess: () => {
-      setForm((f) => ({ ...f, title: "", amount: "", iva_discountable: "" }));
+      const wasNominal = form.nature === "NOMINAL";
+      setForm((f) => ({
+        ...f,
+        title: "",
+        amount: "",
+        iva_discountable: "",
+        on_behalf_of: "",
+        nature: "EMPRESA",
+      }));
       void qc.invalidateQueries({ queryKey: ["expenses"] });
+      void qc.invalidateQueries({ queryKey: ["expenses-nominal"] });
+      if (wasNominal) {
+        setError(null);
+        window.location.assign("/expenses/nominales");
+      }
     },
     onError: (err: unknown) => {
       const msg =
@@ -381,13 +399,24 @@ export function ExpensesPage() {
             />
           </div>
           <div>
-            <FieldLabel>Monto</FieldLabel>
+            <FieldLabel>Monto (total)</FieldLabel>
             <Input
               required
               type="number"
               step="0.01"
               value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            />
+          </div>
+          <div>
+            <FieldLabel>IVA descontable</FieldLabel>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.iva_discountable}
+              onChange={(e) => setForm({ ...form, iva_discountable: e.target.value })}
+              placeholder="0.00"
             />
           </div>
           <div>
@@ -399,6 +428,29 @@ export function ExpensesPage() {
               onChange={(e) => setForm({ ...form, expense_date: e.target.value })}
             />
           </div>
+          <div>
+            <FieldLabel>Naturaleza</FieldLabel>
+            <select
+              className="w-full rounded-xl border border-border bg-warm-white px-3 py-2 text-sm"
+              value={form.nature}
+              onChange={(e) => setForm({ ...form, nature: e.target.value })}
+            >
+              <option value="EMPRESA">De la empresa (EFE / contabilidad)</option>
+              <option value="NOMINAL">
+                Nominal — a nombre de Seeds, no es de la empresa
+              </option>
+            </select>
+          </div>
+          {form.nature === "NOMINAL" ? (
+            <div>
+              <FieldLabel>A nombre real de</FieldLabel>
+              <Input
+                value={form.on_behalf_of}
+                onChange={(e) => setForm({ ...form, on_behalf_of: e.target.value })}
+                placeholder="Persona / tercero"
+              />
+            </div>
+          ) : null}
           <div>
             <FieldLabel>Banco</FieldLabel>
             <select
@@ -414,23 +466,25 @@ export function ExpensesPage() {
               ))}
             </select>
           </div>
-          <div>
-            <FieldLabel>Cuenta EFE</FieldLabel>
-            <select
-              className="w-full rounded-xl border border-border bg-warm-white px-3 py-2 text-sm"
-              value={form.efe_account}
-              onChange={(e) => setForm({ ...form, efe_account: e.target.value })}
-            >
-              <option value="">—</option>
-              {(accounts.data || [])
-                .filter((a) => a.is_leaf)
-                .map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.full_label}
-                  </option>
-                ))}
-            </select>
-          </div>
+          {form.nature === "EMPRESA" ? (
+            <div>
+              <FieldLabel>Cuenta EFE</FieldLabel>
+              <select
+                className="w-full rounded-xl border border-border bg-warm-white px-3 py-2 text-sm"
+                value={form.efe_account}
+                onChange={(e) => setForm({ ...form, efe_account: e.target.value })}
+              >
+                <option value="">—</option>
+                {(accounts.data || [])
+                  .filter((a) => a.is_leaf)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.full_label}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          ) : null}
           <div>
             <FieldLabel>Estado</FieldLabel>
             <select
@@ -438,34 +492,42 @@ export function ExpensesPage() {
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value })}
             >
-              {(statuses.data || []).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
+              {(statuses.data || [])
+                .filter((s) => form.nature === "EMPRESA" || !s.feeds_efe)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
             </select>
           </div>
-          <div className="flex items-end gap-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.amortize}
-                onChange={(e) => setForm({ ...form, amortize: e.target.checked })}
-              />
-              Amortizar
-            </label>
-            {form.amortize ? (
-              <Input
-                type="number"
-                min={1}
-                placeholder="Meses"
-                value={form.amortization_months}
-                onChange={(e) =>
-                  setForm({ ...form, amortization_months: e.target.value })
-                }
-              />
-            ) : null}
-          </div>
+          {form.nature === "EMPRESA" ? (
+            <div className="flex items-end gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.amortize}
+                  onChange={(e) => setForm({ ...form, amortize: e.target.checked })}
+                />
+                Amortizar
+              </label>
+              {form.amortize ? (
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="Meses"
+                  value={form.amortization_months}
+                  onChange={(e) =>
+                    setForm({ ...form, amortization_months: e.target.value })
+                  }
+                />
+              ) : null}
+            </div>
+          ) : (
+            <p className="md:col-span-2 self-end text-xs text-terracotta-600">
+              Al guardar se enviará al módulo de gastos nominales (sin EFE).
+            </p>
+          )}
           <div className="flex items-end">
             <Button type="submit" disabled={createMut.isPending}>
               Crear gasto
@@ -562,6 +624,11 @@ export function ExpensesPage() {
             </p>
             <p>
               <span className="text-text-muted">Banco:</span> {detail.data.bank_name || "—"}
+            </p>
+            <p>
+              <span className="text-text-muted">IVA descontable:</span>{" "}
+              {money(detail.data.iva_discountable)}
+              {detail.data.iva_already_discounted ? " (ya descontado)" : ""}
             </p>
             <p>
               <span className="text-text-muted">Conciliado:</span>{" "}

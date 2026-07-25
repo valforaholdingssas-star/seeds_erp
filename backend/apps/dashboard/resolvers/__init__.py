@@ -14,12 +14,12 @@ def _dec(v) -> Decimal:
 
 
 def gastos_sin_factura() -> ResolverResult:
-    from apps.expenses.models import AttachmentKind, Expense, ExpenseAttachment
+    from apps.expenses.models import AttachmentKind, Expense, ExpenseAttachment, ExpenseNature
 
     has_inv = ExpenseAttachment.objects.filter(
         expense_id=OuterRef("pk"), kind=AttachmentKind.PROVIDER_INVOICE
     )
-    qs = Expense.objects.filter(
+    qs = Expense.objects.filter(nature=ExpenseNature.EMPRESA).filter(
         Q(status__key="FACTURA_SIN_SOPORTE") | ~Exists(has_inv)
     )
     agg = qs.aggregate(c=Count("id"), s=Sum("amount"))
@@ -27,54 +27,68 @@ def gastos_sin_factura() -> ResolverResult:
 
 
 def gastos_sin_comprobante() -> ResolverResult:
-    from apps.expenses.models import AttachmentKind, Expense, ExpenseAttachment
+    from apps.expenses.models import AttachmentKind, Expense, ExpenseAttachment, ExpenseNature
 
     has_proof = ExpenseAttachment.objects.filter(
         expense_id=OuterRef("pk"), kind=AttachmentKind.PAYMENT_PROOF
     )
-    qs = Expense.objects.filter(~Exists(has_proof))
+    qs = Expense.objects.filter(nature=ExpenseNature.EMPRESA).filter(~Exists(has_proof))
     agg = qs.aggregate(c=Count("id"), s=Sum("amount"))
     return {"value": agg["c"] or 0, "amount": _dec(agg["s"])}
 
 
 def gastos_sin_cuenta_efe() -> ResolverResult:
-    from apps.expenses.models import Expense
+    from apps.expenses.models import Expense, ExpenseNature
 
-    qs = Expense.objects.filter(status__feeds_efe=True, efe_account__isnull=True)
+    qs = Expense.objects.filter(
+        nature=ExpenseNature.EMPRESA,
+        status__feeds_efe=True,
+        efe_account__isnull=True,
+    )
     agg = qs.aggregate(c=Count("id"), s=Sum("amount"))
     return {"value": agg["c"] or 0, "amount": _dec(agg["s"])}
 
 
 def reembolsos_por_pagar() -> ResolverResult:
-    from apps.expenses.models import Expense
+    from apps.expenses.models import Expense, ExpenseNature
 
-    qs = Expense.objects.filter(status__key="REEMBOLSOS_POR_PAGAR")
+    qs = Expense.objects.filter(
+        nature=ExpenseNature.EMPRESA, status__key="REEMBOLSOS_POR_PAGAR"
+    )
     agg = qs.aggregate(c=Count("id"), s=Sum("amount"))
     return {"value": agg["c"] or 0, "amount": _dec(agg["s"])}
 
 
 def cuentas_por_pagar() -> ResolverResult:
-    from apps.expenses.models import Expense
+    from apps.expenses.models import Expense, ExpenseNature
 
-    qs = Expense.objects.filter(status__key="CUENTAS_POR_PAGAR")
+    qs = Expense.objects.filter(
+        nature=ExpenseNature.EMPRESA, status__key="CUENTAS_POR_PAGAR"
+    )
     agg = qs.aggregate(c=Count("id"), s=Sum("amount"))
     return {"value": agg["c"] or 0, "amount": _dec(agg["s"])}
 
 
 def iva_por_descontar() -> ResolverResult:
-    from apps.expenses.models import Expense
+    from apps.expenses.models import Expense, ExpenseNature
 
     qs = Expense.objects.filter(
-        iva_discountable__isnull=False, iva_already_discounted=False
+        nature=ExpenseNature.EMPRESA,
+        iva_discountable__isnull=False,
+        iva_already_discounted=False,
     ).exclude(iva_discountable=0)
     agg = qs.aggregate(c=Count("id"), s=Sum("iva_discountable"))
     return {"value": agg["c"] or 0, "amount": _dec(agg["s"])}
 
 
 def gastos_sin_conciliar() -> ResolverResult:
-    from apps.expenses.models import Expense
+    from apps.expenses.models import Expense, ExpenseNature
 
-    qs = Expense.objects.filter(status__feeds_efe=True, bank_movement__isnull=True)
+    qs = Expense.objects.filter(
+        nature=ExpenseNature.EMPRESA,
+        status__feeds_efe=True,
+        bank_movement__isnull=True,
+    )
     agg = qs.aggregate(c=Count("id"), s=Sum("amount"))
     return {"value": agg["c"] or 0, "amount": _dec(agg["s"])}
 

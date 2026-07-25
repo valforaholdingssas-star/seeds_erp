@@ -39,6 +39,7 @@ import { ImportPage } from "@/features/finance/ImportPage";
 import { AuditPage } from "@/features/finance/AuditPage";
 import { ExpensesPage } from "@/features/expenses/ExpensesPage";
 import { PayablesPage } from "@/features/expenses/PayablesPage";
+import { NominalExpensesPage } from "@/features/expenses/NominalExpensesPage";
 import { ControlDashboardPage } from "@/features/dashboard/ControlDashboardPage";
 import { LeadsPage } from "@/features/leads/LeadsPage";
 import { AiPage } from "@/features/ai/AiPage";
@@ -105,6 +106,7 @@ export function App() {
               <Route element={<RequireExpensesAccess />}>
                 <Route path="expenses" element={<ExpensesPage />} />
                 <Route path="expenses/payables" element={<PayablesPage />} />
+                <Route path="expenses/nominales" element={<NominalExpensesPage />} />
               </Route>
               <Route element={<RequireDashboardAccess />}>
                 <Route path="dashboard" element={<ControlDashboardPage />} />

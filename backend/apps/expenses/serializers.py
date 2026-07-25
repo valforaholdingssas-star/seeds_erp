@@ -4,6 +4,7 @@ from apps.expenses.models import (
     Expense,
     ExpenseAmortizationEntry,
     ExpenseAttachment,
+    ExpenseNature,
     ExpenseStatus,
 )
 from apps.expenses.services.amortization import regenerate_amortization
@@ -85,6 +86,8 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "efe_label",
             "accounting_account",
             "attribution",
+            "nature",
+            "on_behalf_of",
             "status",
             "status_key",
             "status_label",
@@ -141,8 +144,22 @@ class ExpenseSerializer(serializers.ModelSerializer):
             validated_data["created_by"] = request.user
         if not validated_data.get("concept"):
             validated_data["concept"] = validated_data.get("title", "")
+        nature = validated_data.get("nature") or ExpenseNature.EMPRESA
+        validated_data["nature"] = nature
+        if nature == ExpenseNature.NOMINAL:
+            # Nunca imputan EFE / Alegra de Seeds
+            validated_data["efe_account"] = None
+            validated_data["alegra_synced"] = False
+            validated_data["alegra_id"] = ""
+            status = validated_data.get("status")
+            if status and status.feeds_efe:
+                raise serializers.ValidationError(
+                    {
+                        "nature": "Un gasto nominal no puede usar un estado que alimenta el EFE."
+                    }
+                )
         expense = super().create(validated_data)
-        if expense.status.feeds_efe:
+        if expense.status.feeds_efe and expense.nature == ExpenseNature.EMPRESA:
             regenerate_amortization(expense, allow_closed=False)
         return expense
 
@@ -152,6 +169,10 @@ class ExpenseSerializer(serializers.ModelSerializer):
             setattr(instance, k, v)
         if not instance.concept:
             instance.concept = instance.title
+        if instance.nature == ExpenseNature.NOMINAL:
+            instance.efe_account = None
+            instance.alegra_synced = False
+            instance.alegra_id = ""
         instance.save()
 
         if new_status and new_status.pk != instance.status_id:
@@ -163,12 +184,13 @@ class ExpenseSerializer(serializers.ModelSerializer):
                 )
             except TransitionError as exc:
                 raise serializers.ValidationError({"status": str(exc)}) from exc
-        elif instance.status.feeds_efe:
-            # amount / amortize / date / efe changes
+        elif instance.status.feeds_efe and instance.nature == ExpenseNature.EMPRESA:
             try:
                 regenerate_amortization(instance, allow_closed=False)
             except ValueError as exc:
                 raise serializers.ValidationError({"detail": str(exc)}) from exc
+        else:
+            regenerate_amortization(instance, allow_closed=True)
         return instance
 
 
@@ -199,6 +221,13 @@ class CreatePayableSerializer(serializers.Serializer):
     bank_account = serializers.UUIDField(required=False, allow_null=True)
     efe_account = serializers.UUIDField(required=False, allow_null=True)
     responsible = serializers.UUIDField(required=False, allow_null=True)
+    iva_discountable = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, allow_null=True
+    )
+    nature = serializers.ChoiceField(
+        choices=["EMPRESA", "NOMINAL"], required=False, default="EMPRESA"
+    )
+    on_behalf_of = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class MarkPaidSerializer(serializers.Serializer):
