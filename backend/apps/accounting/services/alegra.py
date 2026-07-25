@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any
 
@@ -11,6 +12,30 @@ from apps.integrations.models import IntegrationLog, IntegrationSource
 from apps.integrations.rate_limiter import TokenBucketRateLimiter, scrub_headers
 
 logger = logging.getLogger(__name__)
+
+# Alegra Colombia identification types (catalogo contactos).
+_ALEGRA_ID_TYPES = {
+    "CC": "CC",
+    "CEDULA": "CC",
+    "CÉDULA": "CC",
+    "NIT": "NIT",
+    "CE": "CE",
+    "TI": "TI",
+    "PP": "PP",
+    "PA": "PP",
+    "PASAPORTE": "PP",
+    "RC": "RC",
+    "DE": "DE",
+}
+
+
+def _digits_only(value: str) -> str:
+    return re.sub(r"\D+", "", value or "")
+
+
+def _alegra_id_type(raw: str) -> str:
+    key = (raw or "CC").strip().upper()
+    return _ALEGRA_ID_TYPES.get(key, "CC")
 
 
 def _alegra_creds() -> tuple[str, str]:
@@ -65,11 +90,18 @@ def _log(
 def create_or_find_contact(customer) -> dict[str, Any]:
     """POST /contacts or mock. Returns {id: alegra_id, ...}."""
     auth = _auth()
-    id_type = (getattr(customer, "id_type", None) or "CC").strip().upper() or "CC"
-    id_number = (customer.id_number or "").strip()
+    id_type = _alegra_id_type(getattr(customer, "id_type", None) or "CC")
+    raw_number = (customer.id_number or "").strip()
+    # Alegra CO exige identificationObject.number numérico (code 101).
+    id_number = _digits_only(raw_number)
+    if not id_number:
+        raise RuntimeError(
+            "El documento del cliente no tiene dígitos numéricos "
+            f"(valor: '{raw_number}'). Corrige CC/NIT antes de sincronizar con Alegra."
+        )
     payload: dict[str, Any] = {
         "name": (customer.name or id_number or "Cliente").strip(),
-        "identification": id_number or None,
+        "identification": id_number,
         "identificationObject": {
             "type": id_type,
             "number": id_number,
@@ -94,7 +126,7 @@ def create_or_find_contact(customer) -> dict[str, Any]:
     started = time.monotonic()
 
     if not auth:
-        mock_id = f"mock-contact-{customer.id_number or customer.id}"
+        mock_id = f"mock-contact-{id_number or customer.id}"
         body = {"id": mock_id, "name": customer.name, "_mock": True}
         _log(
             method="POST",
@@ -112,25 +144,24 @@ def create_or_find_contact(customer) -> dict[str, Any]:
     limiter = TokenBucketRateLimiter("alegra", rate_per_second=0.8, capacity=1)
     limiter.acquire(timeout=60)
     with httpx.Client(timeout=45.0, auth=auth) as client:
-        # search first
-        if id_number:
-            search = client.get(url, params={"identification": id_number})
-            if search.is_success:
-                data = search.json()
-                if isinstance(data, list) and data:
-                    found = data[0] if isinstance(data[0], dict) else {"id": data[0]}
-                    _log(
-                        method="GET",
-                        url=url,
-                        request_body={"identification": id_number},
-                        response_status=search.status_code,
-                        response_body=found if isinstance(found, dict) else {"raw": str(found)},
-                        success=True,
-                        latency_ms=int((time.monotonic() - started) * 1000),
-                        ref_type="Customer",
-                        ref_id=str(customer.id),
-                    )
-                    return found
+        # search first by numeric identification
+        search = client.get(url, params={"identification": id_number})
+        if search.is_success:
+            data = search.json()
+            if isinstance(data, list) and data:
+                found = data[0] if isinstance(data[0], dict) else {"id": data[0]}
+                _log(
+                    method="GET",
+                    url=url,
+                    request_body={"identification": id_number},
+                    response_status=search.status_code,
+                    response_body=found if isinstance(found, dict) else {"raw": str(found)},
+                    success=True,
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                    ref_type="Customer",
+                    ref_id=str(customer.id),
+                )
+                return found
         resp = client.post(url, json=payload)
     latency = int((time.monotonic() - started) * 1000)
     try:
@@ -150,7 +181,8 @@ def create_or_find_contact(customer) -> dict[str, Any]:
         ref_id=str(customer.id),
     )
     if not resp.is_success:
-        raise RuntimeError(f"Alegra contact {resp.status_code}: {body}")
+        msg = body if isinstance(body, dict) else {"raw": str(body)}
+        raise RuntimeError(f"Alegra contact {resp.status_code}: {msg}")
     return body if isinstance(body, dict) else {"id": str(body)}
 
 
