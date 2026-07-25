@@ -13,7 +13,7 @@ from apps.integrations.rate_limiter import TokenBucketRateLimiter, scrub_headers
 
 logger = logging.getLogger(__name__)
 
-# Alegra Colombia identification types (catalogo contactos).
+# Alegra Colombia identification types (FE catalog).
 _ALEGRA_ID_TYPES = {
     "CC": "CC",
     "CEDULA": "CC",
@@ -25,8 +25,15 @@ _ALEGRA_ID_TYPES = {
     "PA": "PP",
     "PASAPORTE": "PP",
     "RC": "RC",
-    "DE": "DE",
+    "DE": "DIE",
+    "DIE": "DIE",
+    "TE": "TE",
+    "NUIP": "NUIP",
+    "FOREIGN_NIT": "FOREIGN_NIT",
 }
+
+# DIAN check-digit weights for NIT.
+_NIT_DV_WEIGHTS = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71]
 
 
 def _digits_only(value: str) -> str:
@@ -36,6 +43,129 @@ def _digits_only(value: str) -> str:
 def _alegra_id_type(raw: str) -> str:
     key = (raw or "CC").strip().upper()
     return _ALEGRA_ID_TYPES.get(key, "CC")
+
+
+def _nit_check_digit(number: str) -> str:
+    digits = [int(ch) for ch in (_digits_only(number) or "0")]
+    total = sum(d * _NIT_DV_WEIGHTS[i] for i, d in enumerate(reversed(digits)))
+    residue = total % 11
+    return str(residue if residue in (0, 1) else 11 - residue)
+
+
+def _split_person_name(full: str) -> dict[str, str]:
+    parts = [p for p in (full or "").strip().split() if p]
+    if not parts:
+        return {"firstName": "Cliente", "lastName": "Seeds"}
+    if len(parts) == 1:
+        return {"firstName": parts[0], "lastName": parts[0]}
+    if len(parts) == 2:
+        return {"firstName": parts[0], "lastName": parts[1]}
+    if len(parts) == 3:
+        return {
+            "firstName": parts[0],
+            "secondName": parts[1],
+            "lastName": parts[2],
+        }
+    return {
+        "firstName": parts[0],
+        "secondName": parts[1],
+        "lastName": " ".join(parts[2:]),
+    }
+
+
+def _drop_empty(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned = {k: _drop_empty(v) for k, v in value.items() if v is not None and v != ""}
+        return {k: v for k, v in cleaned.items() if v not in (None, "", {}, [])}
+    if isinstance(value, list):
+        return [_drop_empty(v) for v in value if v is not None and v != ""]
+    return value
+
+
+def _resolve_alegra_address(customer) -> dict[str, str]:
+    """Map ERP city → Alegra address {city, department, country, address}.
+
+    Alegra CO FE rejects city without a valid DIAN department (code 2112).
+    Existing Alegra contacts use e.g. city=\"Bogotá, D.C.\" + department=\"Bogotá D.C.\".
+    """
+    from apps.geo.models import GeoCatalog
+    from apps.geo.services import is_blocked_city, resolve_city
+
+    raw_city = (getattr(customer, "city", None) or "").strip()
+    street = (getattr(customer, "address", None) or "").strip() or "Dirección no reportada"
+
+    geo = None
+    if raw_city and not is_blocked_city(raw_city):
+        matches = resolve_city(raw_city, limit=1)
+        geo = matches[0] if matches else None
+
+    if geo is None:
+        # Fallback: Bogotá (majority of Seeds orders / blocked tokens like DOMICILIO).
+        geo = (
+            GeoCatalog.objects.filter(municipality_code__startswith="11001").first()
+            or GeoCatalog.objects.filter(department_iso="DC").first()
+        )
+
+    if geo is None:
+        raise RuntimeError(
+            f"No se pudo resolver ciudad/departamento Alegra (ciudad='{raw_city}'). "
+            "Corrige la ciudad del cliente o seed del catálogo geo."
+        )
+
+    city_name = geo.municipality
+    if geo.department_iso == "DC" or str(geo.municipality_code).startswith("11001"):
+        city_name = "Bogotá, D.C."
+
+    return {
+        "address": street[:255],
+        "city": city_name,
+        "department": geo.department,
+        "country": "Colombia",
+    }
+
+
+def build_contact_payload(customer) -> dict[str, Any]:
+    """Colombia FE contact body validated against Alegra API (POST /contacts).
+
+    Required by Alegra CO FE: identificationObject, kindOfPerson, regime.
+    National IDs also need address.city + address.department + address.address.
+    """
+    id_type = _alegra_id_type(getattr(customer, "id_type", None) or "CC")
+    raw_number = (customer.id_number or "").strip()
+    id_number = _digits_only(raw_number)
+    if not id_number:
+        raise RuntimeError(
+            "El documento del cliente no tiene dígitos numéricos "
+            f"(valor: '{raw_number}'). Corrige CC/NIT antes de sincronizar con Alegra."
+        )
+
+    is_company = id_type in {"NIT", "FOREIGN_NIT"}
+    kind = "LEGAL_ENTITY" if is_company else "PERSON_ENTITY"
+    regime = "COMMON_REGIME" if is_company else "SIMPLIFIED_REGIME"
+    full_name = (customer.name or id_number or "Cliente").strip()
+
+    identification: dict[str, Any] = {"type": id_type, "number": id_number}
+    if id_type == "NIT":
+        identification["dv"] = _nit_check_digit(id_number)
+
+    payload: dict[str, Any] = {
+        "kindOfPerson": kind,
+        "regime": regime,
+        "identificationObject": identification,
+        "identification": id_number,
+        "email": (customer.email or "").strip() or None,
+        "phonePrimary": (customer.phone or "").strip() or None,
+        "mobile": (customer.phone or "").strip() or None,
+        "address": _resolve_alegra_address(customer),
+        "type": ["client"],
+        "status": "active",
+    }
+    if kind == "PERSON_ENTITY":
+        payload["nameObject"] = _split_person_name(full_name)
+    else:
+        payload["name"] = full_name
+
+    return _drop_empty(payload)
 
 
 def _alegra_creds() -> tuple[str, str]:
@@ -90,38 +220,8 @@ def _log(
 def create_or_find_contact(customer) -> dict[str, Any]:
     """POST /contacts or mock. Returns {id: alegra_id, ...}."""
     auth = _auth()
-    id_type = _alegra_id_type(getattr(customer, "id_type", None) or "CC")
-    raw_number = (customer.id_number or "").strip()
-    # Alegra CO exige identificationObject.number numérico (code 101).
-    id_number = _digits_only(raw_number)
-    if not id_number:
-        raise RuntimeError(
-            "El documento del cliente no tiene dígitos numéricos "
-            f"(valor: '{raw_number}'). Corrige CC/NIT antes de sincronizar con Alegra."
-        )
-    payload: dict[str, Any] = {
-        "name": (customer.name or id_number or "Cliente").strip(),
-        "identification": id_number,
-        "identificationObject": {
-            "type": id_type,
-            "number": id_number,
-        },
-        "email": (customer.email or "").strip() or None,
-        "phonePrimary": (customer.phone or "").strip() or None,
-        "address": {
-            "address": (customer.address or "").strip() or None,
-            "city": (customer.city or "").strip() or None,
-        },
-        "type": ["client"],
-        "status": "active",
-    }
-    # Drop empty nested values Alegra rejects
-    if not payload["address"]["address"] and not payload["address"]["city"]:
-        payload.pop("address", None)
-    else:
-        payload["address"] = {
-            k: v for k, v in payload["address"].items() if v
-        }
+    payload = build_contact_payload(customer)
+    id_number = payload["identificationObject"]["number"]
     url = f"{_alegra_base_url()}/contacts"
     started = time.monotonic()
 

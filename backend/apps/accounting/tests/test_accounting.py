@@ -130,3 +130,36 @@ def test_bulk_normalize_documents(api, admin_user, db):
     assert dirty.id_number == "12345678"
     assert clean.id_number == "9876543210"
     assert emptyish.id_number == "SIN-DOC-ABC"
+
+
+@pytest.mark.django_db
+def test_build_contact_payload_includes_department(db):
+    from apps.accounting.models import Customer
+    from apps.accounting.services.alegra import build_contact_payload
+    from apps.geo.models import GeoCatalog
+
+    GeoCatalog.objects.create(
+        municipality="Bogotá",
+        municipality_code="11001000",
+        department="Bogotá D.C.",
+        department_iso="DC",
+        search="bogota",
+    )
+    customer = Customer.objects.create(
+        name="Ana María López",
+        id_type="CC",
+        id_number="52.817.930",
+        city="Bogota",
+        address="Calle 1 #2-3",
+        email="ana@ex.com",
+        phone="3001234567",
+    )
+    payload = build_contact_payload(customer)
+    assert payload["kindOfPerson"] == "PERSON_ENTITY"
+    assert payload["regime"] == "SIMPLIFIED_REGIME"
+    assert payload["identificationObject"] == {"type": "CC", "number": "52817930"}
+    assert payload["nameObject"]["firstName"] == "Ana"
+    assert payload["address"]["department"] == "Bogotá D.C."
+    assert payload["address"]["city"] == "Bogotá, D.C."
+    assert payload["address"]["country"] == "Colombia"
+    assert "name" not in payload
