@@ -15,6 +15,8 @@ type EfeLine = {
   kind: string;
   is_leaf: boolean;
   depth: number;
+  computed?: boolean;
+  formula?: string;
   real: Record<string, string>;
   budget: Record<string, string>;
   variance: Record<string, string>;
@@ -80,6 +82,13 @@ const KIND_STYLE: Record<
     badge: "dark",
     accent: "border-l-[3px] border-l-line",
   },
+  RESULTADO: {
+    row: "bg-green-900 text-text-on-dark",
+    sticky: "bg-green-900",
+    label: "text-text-on-dark",
+    badge: "sage",
+    accent: "border-l-[3px] border-l-cream-200",
+  },
 };
 
 function depthType(depth: number, isLeaf: boolean) {
@@ -112,6 +121,10 @@ function depthType(depth: number, isLeaf: boolean) {
 }
 
 function amountClass(value: number, kind: string) {
+  if (kind === "RESULTADO") {
+    if (!value) return "text-text-on-dark-muted";
+    return value < 0 ? "text-rose-300" : "text-cream-200";
+  }
   if (!value) return "text-text-soft";
   if (kind === "VENTAS" || kind === "INGRESO") {
     return value < 0 ? "text-wine-900" : "text-green-900";
@@ -270,17 +283,19 @@ export function EfePage() {
             ["GASTO", "Gastos", "bg-rose-300"],
             ["ADMIN", "Admin", "bg-wine-900"],
             ["PASIVO", "Pasivos", "bg-text-soft"],
+            ["RESULTADO", "Resultados", "bg-green-900"],
           ] as const
         ).map(([kind, label, dot]) => (
           <span
             key={kind}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] label-caps",
-              KIND_STYLE[kind]?.row,
-              KIND_STYLE[kind]?.label,
+              kind === "RESULTADO"
+                ? "bg-green-900 text-text-on-dark"
+                : cn(KIND_STYLE[kind]?.row, KIND_STYLE[kind]?.label),
             )}
           >
-            <span className={cn("h-2 w-2 rounded-full", dot)} />
+            <span className={cn("h-2 w-2 rounded-full", kind === "RESULTADO" ? "bg-cream-200" : dot)} />
             {label}
           </span>
         ))}
@@ -289,7 +304,7 @@ export function EfePage() {
             ? `% sobre 1. VENTAS NETAS · mes act. ${focus.current.slice(5)}${
                 focus.previous ? ` · mes ant. ${focus.previous.slice(5)}` : ""
               }`
-            : "Árbol de cuentas · toggle % ventas para ver peso sobre ventas"}
+            : "MB = Ventas+COGS · EBITDA = MB−Admin−Costos−Gastos · NIAT = EBITDA+Recaudo"}
         </p>
       </Card>
 
@@ -333,7 +348,14 @@ export function EfePage() {
               {visible.map((line) => {
                 const style = KIND_STYLE[line.kind] || KIND_STYLE.PASIVO;
                 const type = depthType(line.depth, line.is_leaf);
-                const stickyBg = line.depth === 0 ? style.sticky : line.is_leaf ? "bg-warm-white" : style.sticky;
+                const isResult = line.kind === "RESULTADO" || line.computed;
+                const stickyBg = isResult
+                  ? "bg-green-900"
+                  : line.depth === 0
+                    ? style.sticky
+                    : line.is_leaf
+                      ? "bg-warm-white"
+                      : style.sticky;
                 const curPct = pctOfSales(
                   Number(line.real[focus.current] || 0),
                   salesByMonth[focus.current] || 0,
@@ -349,24 +371,34 @@ export function EfePage() {
                 return (
                   <tr
                     key={line.code}
+                    title={line.formula || undefined}
                     className={cn(
                       "border-b border-line/50 transition-colors hover:brightness-[0.98]",
-                      line.depth === 0 ? style.row : line.is_leaf ? "bg-warm-white/80" : style.row,
-                      type.rowExtra,
-                      line.depth === 0 && style.accent,
+                      isResult
+                        ? "bg-green-900"
+                        : line.depth === 0
+                          ? style.row
+                          : line.is_leaf
+                            ? "bg-warm-white/80"
+                            : style.row,
+                      !isResult && type.rowExtra,
+                      line.depth === 0 && !isResult && style.accent,
                     )}
                   >
-                    <td className={cn("sticky left-0 z-[1] px-2 py-1.5 whitespace-nowrap", stickyBg)}>
+                    <td className={cn("sticky left-0 z-[1] px-2 py-2 whitespace-nowrap", stickyBg)}>
                       <button
                         type="button"
-                        className={cn("flex max-w-[320px] items-center gap-1.5 text-left", style.label, type.name)}
-                        style={{ paddingLeft: `${Math.min(line.depth, 5) * 14}px` }}
+                        className={cn(
+                          "flex max-w-[360px] items-center gap-1.5 text-left",
+                          isResult ? "text-text-on-dark font-serif text-[14px] tracking-tight" : cn(style.label, type.name),
+                        )}
+                        style={{ paddingLeft: isResult ? 0 : `${Math.min(line.depth, 5) * 14}px` }}
                         onClick={() => {
-                          if (line.is_leaf) return;
+                          if (line.is_leaf || isResult) return;
                           setCollapsed((c) => ({ ...c, [line.code]: !c[line.code] }));
                         }}
                       >
-                        {!line.is_leaf ? (
+                        {!line.is_leaf && !isResult ? (
                           <span className="inline-block w-3 shrink-0 text-[10px] opacity-70">
                             {collapsed[line.code] ? "▸" : "▾"}
                           </span>
@@ -374,12 +406,19 @@ export function EfePage() {
                           <span className="inline-block w-3 shrink-0" />
                         )}
                         <span className="truncate">{line.full_label}</span>
-                        {line.depth === 0 ? (
+                        {isResult ? (
+                          <Badge variant="sage" className="ml-1 shrink-0">
+                            calc
+                          </Badge>
+                        ) : line.depth === 0 ? (
                           <Badge variant={style.badge} className="ml-1 shrink-0">
                             {line.kind}
                           </Badge>
                         ) : null}
                       </button>
+                      {isResult && line.formula ? (
+                        <p className="mt-0.5 pl-3 text-[10px] text-text-on-dark-muted">{line.formula}</p>
+                      ) : null}
                     </td>
                     {months.map((m) => {
                       const cell = cellDisplay(line, m);

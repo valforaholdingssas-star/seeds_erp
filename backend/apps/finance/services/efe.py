@@ -11,10 +11,48 @@ from apps.finance.models import (
     EfeMonthClose,
     FinancialAccount,
     FinancialAccountKind,
-    MovementItem,
     MovementStatus,
 )
 from apps.sales.models import ConsolidatedSale, SaleSource, SaleState
+
+
+# Resultados derivados del P&L (no son cuentas del árbol; se calculan en vivo).
+# Convención de signos: ventas/ingresos (+), costos/gastos desde banco (−).
+# Margen bruto = Ventas + COGS
+# EBITDA     = Ventas + COGS + Admin + Costos op. + Gastos  (sin D&A explícito)
+# NIAT       = EBITDA + Ingreso/Recaudo  (resultado después de recaudo/otros; excluye pasivos)
+COMPUTED_RESULTS: list[dict] = [
+    {
+        "code": "MB",
+        "name": "MARGEN BRUTO",
+        "full_label": "MB. MARGEN BRUTO",
+        "kind": "RESULTADO",
+        "order": 36,
+        "insert_after_prefix": "3",
+        "components": ["1", "3"],
+        "formula": "Ventas netas (1) + COGS (3)",
+    },
+    {
+        "code": "EBITDA",
+        "name": "EBITDA",
+        "full_label": "EBITDA. EBITDA",
+        "kind": "RESULTADO",
+        "order": 76,
+        "insert_after_prefix": "7",
+        "components": ["1", "3", "5", "6", "7"],
+        "formula": "Margen bruto − Admin (5) − Costos op. (6) − Gastos (7)",
+    },
+    {
+        "code": "NIAT",
+        "name": "NIAT",
+        "full_label": "NIAT. NIAT (resultado neto)",
+        "kind": "RESULTADO",
+        "order": 78,
+        "insert_after_prefix": "EBITDA",
+        "components": ["1", "3", "4", "5", "6", "7"],
+        "formula": "EBITDA + Ingreso/Recaudo (4) · excluye pasivos interbancarios (8)",
+    },
+]
 
 
 def sale_efe_code(sale: ConsolidatedSale, *, shipping: bool = False) -> str | None:
@@ -45,13 +83,71 @@ def _month_key(dt) -> str:
     return f"{dt.year:04d}-{dt.month:02d}"
 
 
+def _sum_components(
+    matrix: dict[str, dict[str, Decimal]], codes: list[str], months: list[str]
+) -> dict[str, Decimal]:
+    out: dict[str, Decimal] = {m: Decimal("0") for m in months}
+    for code in codes:
+        row = matrix.get(code)
+        if not row:
+            continue
+        for m in months:
+            out[m] += Decimal(row.get(m) or 0)
+    return out
+
+
+def _append_computed_lines(
+    *,
+    lines: list[dict],
+    matrix: dict[str, dict[str, Decimal]],
+    months: list[str],
+) -> list[dict]:
+    computed_rows: list[dict] = []
+    for spec in COMPUTED_RESULTS:
+        real_dec = _sum_components(matrix, spec["components"], months)
+        matrix[spec["code"]] = real_dec
+        computed_rows.append(
+            {
+                "code": spec["code"],
+                "name": spec["name"],
+                "full_label": spec["full_label"],
+                "kind": spec["kind"],
+                "is_leaf": True,
+                "parent": None,
+                "depth": 0,
+                "order": spec["order"],
+                "computed": True,
+                "formula": spec["formula"],
+                "components": spec["components"],
+                "real": {m: str(real_dec[m]) for m in months},
+                "budget": {m: "0" for m in months},
+                "variance": {m: str(real_dec[m]) for m in months},
+            }
+        )
+
+    # Insert after the last account whose code starts with the given prefix.
+    out = list(lines)
+    for row in computed_rows:
+        spec = next(s for s in COMPUTED_RESULTS if s["code"] == row["code"])
+        prefix = spec["insert_after_prefix"]
+        insert_at = len(out)
+        for i, line in enumerate(out):
+            code = line["code"]
+            if prefix in {"MB", "EBITDA", "NIAT"}:
+                if code == prefix:
+                    insert_at = i + 1
+            elif code == prefix or code.startswith(f"{prefix}."):
+                insert_at = i + 1
+        out.insert(insert_at, row)
+    return out
+
+
 def build_efe(year: int) -> dict:
     accounts = list(
         FinancialAccount.objects.filter(active=True)
         .select_related("parent")
         .order_by("order", "code")
     )
-    by_code = {a.code: a for a in accounts}
     months = [f"{year:04d}-{m:02d}" for m in range(1, 13)]
     matrix: dict[str, dict[str, Decimal]] = {
         a.code: {m: Decimal("0") for m in months} for a in accounts
@@ -111,17 +207,6 @@ def build_efe(year: int) -> dict:
         if code in matrix:
             matrix[code][mk] += Decimal(row["total"] or 0)
 
-    # Roll up parents (deepest first)
-    sorted_accounts = sorted(accounts, key=lambda a: a.code.count("."), reverse=True)
-    for acc in sorted_accounts:
-        if acc.is_leaf or not acc.parent_id:
-            continue
-        # sum direct children already rolled
-    # Better: for each parent, sum children by walking tree bottom-up
-    children_map: dict[str | None, list[FinancialAccount]] = {}
-    for a in accounts:
-        children_map.setdefault(str(a.parent_id) if a.parent_id else None, []).append(a)
-
     def roll(node: FinancialAccount):
         kids = [c for c in accounts if c.parent_id == node.id]
         if not kids:
@@ -167,21 +252,61 @@ def build_efe(year: int) -> dict:
                 "parent": a.parent.code if a.parent_id else None,
                 "depth": a.code.count("."),
                 "order": a.order,
+                "computed": False,
                 "real": real,
                 "budget": ppto,
                 "variance": var,
             }
         )
 
+    lines = _append_computed_lines(lines=lines, matrix=matrix, months=months)
+
     return {
         "year": year,
         "months": months,
         "lines": lines,
         "closed_months": closed,
+        "computed": [
+            {
+                "code": s["code"],
+                "name": s["name"],
+                "formula": s["formula"],
+                "components": s["components"],
+            }
+            for s in COMPUTED_RESULTS
+        ],
     }
 
 
 def efe_drilldown(*, code: str, year: int, month: int) -> dict:
+    spec = next((s for s in COMPUTED_RESULTS if s["code"] == code), None)
+    if spec:
+        efe = build_efe(year)
+        mk = f"{year:04d}-{month:02d}"
+        line = next((l for l in efe["lines"] if l["code"] == code), None)
+        components = []
+        for c in spec["components"]:
+            src = next((l for l in efe["lines"] if l["code"] == c), None)
+            components.append(
+                {
+                    "code": c,
+                    "name": src["name"] if src else c,
+                    "value": src["real"].get(mk, "0") if src else "0",
+                }
+            )
+        return {
+            "code": code,
+            "name": spec["name"],
+            "year": year,
+            "month": month,
+            "computed": True,
+            "formula": spec["formula"],
+            "value": line["real"].get(mk, "0") if line else "0",
+            "components": components,
+            "sales": [],
+            "movements": [],
+        }
+
     account = FinancialAccount.objects.filter(code=code).first()
     if not account:
         raise ValueError(f"Cuenta EFE {code} no existe")
