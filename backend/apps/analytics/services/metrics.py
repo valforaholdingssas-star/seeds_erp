@@ -1,3 +1,5 @@
+"""Sales analytics. Monetary KPIs use net_value (venta sin IVA)."""
+
 from __future__ import annotations
 
 from calendar import monthrange
@@ -14,6 +16,9 @@ from apps.sales.models import ConsolidatedSale, SaleState
 
 
 WEEKDAY_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+
+# Semántica Seeds: "venta" = neto sin IVA (no total cobrado al cliente).
+SALES_AMOUNT = "net_value"
 
 
 def _parse_date(value: str | None) -> date | None:
@@ -116,7 +121,7 @@ def sales_summary(
         seller=seller,
         city=city,
     )
-    agg = qs.aggregate(total=Sum("total_value"), iva=Sum("iva_generated"), orders=Count("id"))
+    agg = qs.aggregate(total=Sum(SALES_AMOUNT), iva=Sum("iva_generated"), orders=Count("id"))
     total = Decimal(agg["total"] or 0)
     orders = int(agg["orders"] or 0)
 
@@ -154,7 +159,7 @@ def sales_summary(
             seller=seller,
             city=city,
         )
-        prev_agg = prev_qs.aggregate(total=Sum("total_value"), orders=Count("id"))
+        prev_agg = prev_qs.aggregate(total=Sum(SALES_AMOUNT), orders=Count("id"))
         prev_total = Decimal(prev_agg["total"] or 0)
         prev = {
             "from": prev_from.isoformat(),
@@ -176,6 +181,7 @@ def sales_summary(
             "goal": _money(period_goal),
             "goal_month": _money(goal),
             "sales": _money(total),
+            "sales_basis": "net_value",
             "performance_pct": performance,
             "projection": _money(projection),
             "daily_expected": _money(daily_expected),
@@ -197,7 +203,7 @@ def by_channel(**filters) -> dict[str, Any]:
     qs = _base_qs(date_from=date_from, date_to=date_to, **filters)
     rows = (
         qs.values("source")
-        .annotate(total=Sum("total_value"), orders=Count("id"))
+        .annotate(total=Sum(SALES_AMOUNT), orders=Count("id"))
         .order_by("-total")
     )
     return {
@@ -218,7 +224,7 @@ def by_seller(**filters) -> dict[str, Any]:
     qs = _base_qs(date_from=date_from, date_to=date_to, **filters)
     rows = (
         qs.values("seller__name")
-        .annotate(total=Sum("total_value"), orders=Count("id"))
+        .annotate(total=Sum(SALES_AMOUNT), orders=Count("id"))
         .order_by("-total")
     )
     return {
@@ -249,7 +255,7 @@ def by_city(**filters) -> dict[str, Any]:
         qs = _base_qs(date_from=date_from, date_to=date_to, **filters)
     rows = (
         qs.values("city_raw")
-        .annotate(total=Sum("total_value"), orders=Count("id"))
+        .annotate(total=Sum(SALES_AMOUNT), orders=Count("id"))
         .order_by("-total")[:15]
     )
     return {
@@ -293,7 +299,7 @@ def timeseries(
     rows = (
         qs.annotate(bucket=trunc)
         .values("bucket")
-        .annotate(total=Sum("total_value"), orders=Count("id"))
+        .annotate(total=Sum(SALES_AMOUNT), orders=Count("id"))
         .order_by("bucket")
     )
     days = max(1, (date_to - date_from).days + 1)
@@ -340,13 +346,13 @@ def weekday_bars(
 
     def _buckets(qs):
         counts = [0.0] * 7
-        for sale in qs.only("closed_at", "created_at", "total_value"):
+        for sale in qs.only("closed_at", "created_at", SALES_AMOUNT):
             sale_at = sale.closed_at or sale.created_at
             if not sale_at:
                 continue
             # Monday=0
             idx = timezone.localtime(sale_at).weekday()
-            counts[idx] += float(sale.total_value or 0)
+            counts[idx] += float(getattr(sale, SALES_AMOUNT) or 0)
         return [
             {"weekday": i, "label": WEEKDAY_LABELS[i], "total": _money(v)}
             for i, v in enumerate(counts)
@@ -401,7 +407,7 @@ def year_comparison(
         rows = (
             qs.annotate(bucket=TruncMonth(_sale_at_expr()))
             .values("bucket")
-            .annotate(total=Sum("total_value"))
+            .annotate(total=Sum(SALES_AMOUNT))
             .order_by("bucket")
         )
         out = {i: 0.0 for i in range(1, 13)}
@@ -438,7 +444,7 @@ def home_overview() -> dict[str, Any]:
 
     def _day_sales(day: date) -> dict[str, Any]:
         agg = _base_qs(date_from=day, date_to=day).aggregate(
-            total=Sum("total_value"), orders=Count("id")
+            total=Sum(SALES_AMOUNT), orders=Count("id")
         )
         return {
             "date": day.isoformat(),

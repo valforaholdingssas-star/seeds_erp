@@ -182,7 +182,7 @@ export function AnalyticsPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Kpi label="Meta período" value={formatCOP(Number(kpis.goal))} />
           <Kpi
-            label="Ventas"
+            label="Ventas (sin IVA)"
             value={formatCOP(Number(kpis.sales))}
             hint={
               delta == null

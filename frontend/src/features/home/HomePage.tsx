@@ -140,7 +140,7 @@ export function HomePage() {
             }
           />
           <KpiCard
-            label="Ventas hoy"
+            label="Ventas hoy (sin IVA)"
             value={
               loading ? "…" : formatCOP(Number(data?.sales_today.sales || 0))
             }
@@ -153,7 +153,7 @@ export function HomePage() {
             delayMs={120}
           />
           <KpiCard
-            label="Ventas ayer"
+            label="Ventas ayer (sin IVA)"
             value={
               loading
                 ? "…"
