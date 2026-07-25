@@ -3,6 +3,7 @@ from apps.logistics.services.shipments import (
     ensure_shipment_for_sale,
     generate_shipment_guide,
     mark_shipments_sent,
+    operational_shipments,
 )
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "ensure_shipment_for_sale",
     "generate_shipment_guide",
     "mark_shipments_sent",
+    "operational_shipments",
 ]

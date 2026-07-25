@@ -26,6 +26,7 @@ from apps.logistics.services.shipments import (
     generate_shipment_guide,
     mark_shipment_cancelled_local,
     mark_shipments_sent,
+    operational_shipments,
     reopen_shipment_for_regenerate,
 )
 from apps.logistics.tasks import enqueue_generate_shipments, run_format_batch
@@ -80,11 +81,10 @@ class ShipmentViewSet(viewsets.ModelViewSet):
         return ShipmentSerializer
 
     def get_queryset(self):
-        qs = (
+        qs = operational_shipments(
             Shipment.objects.select_related("sale", "geo_city")
             .prefetch_related("sale__items")
             .filter(sale__state=SaleState.ACTIVE)
-            .exclude(warning_detail__historical_import=True)
         )
         include_sent = self.request.query_params.get("include_sent")
         status_filter = self.request.query_params.get("status")
@@ -215,13 +215,11 @@ class DispatchListView(APIView):
 
     def get(self, request):
         sent = request.query_params.get("sent") == "1"
-        qs = (
+        qs = operational_shipments(
             Shipment.objects.select_related("sale")
             .prefetch_related("sale__items")
             .filter(status=ShipmentStatus.ENVIADO if sent else ShipmentStatus.LISTO_PARA_ENVIAR)
-            .exclude(warning_detail__historical_import=True)
-            .order_by("-sent_at" if sent else "-updated_at")
-        )
+        ).order_by("-sent_at" if sent else "-updated_at")
         return Response(ShipmentSerializer(qs, many=True).data)
 
 

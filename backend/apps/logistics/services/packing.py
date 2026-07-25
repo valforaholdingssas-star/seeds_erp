@@ -4,6 +4,7 @@ from collections import defaultdict
 from typing import Any
 
 from apps.logistics.models import Shipment, ShipmentStatus
+from apps.logistics.services.shipments import operational_shipments
 from apps.sales.kit_types import kit_type_label, normalize_kit_type
 
 
@@ -24,11 +25,10 @@ def packing_summary(*, sent: bool = False) -> dict[str, Any]:
     Agrupa por tipo de kit normalizado + color (una sola caja por variante).
     """
     status = ShipmentStatus.ENVIADO if sent else ShipmentStatus.LISTO_PARA_ENVIAR
-    qs = (
+    qs = operational_shipments(
         Shipment.objects.select_related("sale")
         .prefetch_related("sale__items")
         .filter(status=status)
-        .exclude(warning_detail__historical_import=True)
     )
 
     buckets: dict[tuple[str, str], dict[str, Any]] = {}

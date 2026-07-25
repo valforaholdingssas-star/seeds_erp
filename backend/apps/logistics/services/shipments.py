@@ -13,6 +13,13 @@ from apps.logistics.services.formatting import format_shipment
 from apps.sales.services.normalization import recalculate_shipping
 
 
+def operational_shipments(qs=None):
+    """Shipments visible in logistics/dispatch (excludes CSV historical imports)."""
+    base = qs if qs is not None else Shipment.objects.all()
+    # Use contains=… — exclude(key=True) also drops rows where the key is missing.
+    return base.exclude(warning_detail__contains={"historical_import": True})
+
+
 def ensure_shipment_for_sale(sale, *, actor=None) -> Shipment | None:
     from apps.sales.models import FulfillmentType, fulfillment_requires_envia
 
