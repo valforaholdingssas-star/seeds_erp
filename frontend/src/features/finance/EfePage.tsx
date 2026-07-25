@@ -120,10 +120,39 @@ function amountClass(value: number, kind: string) {
   return "text-green-900";
 }
 
+function monthKey(year: number, month: number) {
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function focusMonths(year: number, months: string[]) {
+  const now = new Date();
+  let curMonth = 12;
+  if (year === now.getFullYear()) curMonth = now.getMonth() + 1;
+  else if (year > now.getFullYear()) curMonth = 1;
+  const current = monthKey(year, curMonth);
+  const prev =
+    curMonth === 1 ? null : monthKey(year, curMonth - 1);
+  return {
+    current: months.includes(current) ? current : months[months.length - 1] || current,
+    previous: prev && months.includes(prev) ? prev : null,
+  };
+}
+
+function pctOfSales(value: number, sales: number): number | null {
+  if (!sales) return null;
+  return (value / sales) * 100;
+}
+
+function formatPct(pct: number | null, digits = 1) {
+  if (pct == null || Number.isNaN(pct)) return "—";
+  return `${pct.toFixed(digits)}%`;
+}
+
 export function EfePage() {
   const yearNow = new Date().getFullYear();
   const [year, setYear] = useState(yearNow);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [viewMode, setViewMode] = useState<"cop" | "pct">("cop");
 
   const efe = useQuery({
     queryKey: ["finance-efe", year],
@@ -132,6 +161,19 @@ export function EfePage() {
       return data;
     },
   });
+
+  const months = efe.data?.months || [];
+
+  const salesByMonth = useMemo(() => {
+    const ventas = efe.data?.lines.find((l) => l.code === "1");
+    const out: Record<string, number> = {};
+    for (const m of months) {
+      out[m] = Number(ventas?.real[m] || 0);
+    }
+    return out;
+  }, [efe.data, months]);
+
+  const focus = useMemo(() => focusMonths(year, months), [year, months]);
 
   const visible = useMemo(() => {
     const lines = efe.data?.lines || [];
@@ -145,7 +187,22 @@ export function EfePage() {
     });
   }, [efe.data, collapsed]);
 
-  const months = efe.data?.months || [];
+  function cellDisplay(line: EfeLine, m: string) {
+    const v = Number(line.real[m] || 0);
+    if (viewMode === "cop") {
+      return {
+        text: v ? formatCOP(v) : "—",
+        cls: amountClass(v, line.kind),
+        title: undefined as string | undefined,
+      };
+    }
+    const pct = pctOfSales(v, salesByMonth[m] || 0);
+    return {
+      text: formatPct(pct),
+      cls: pct == null ? "text-text-soft" : amountClass(v, line.kind),
+      title: v ? `${formatCOP(v)} · base ventas ${formatCOP(salesByMonth[m] || 0)}` : undefined,
+    };
+  }
 
   return (
     <div className="space-y-3">
@@ -154,6 +211,24 @@ export function EfePage() {
         title="Modelo financiero (EFE)"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-full border border-line bg-cream-50 p-0.5">
+              <Button
+                type="button"
+                size="xs"
+                variant={viewMode === "cop" ? "primary-dark" : "ghost"}
+                onClick={() => setViewMode("cop")}
+              >
+                $ Valores
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant={viewMode === "pct" ? "primary-dark" : "ghost"}
+                onClick={() => setViewMode("pct")}
+              >
+                % ventas
+              </Button>
+            </div>
             <Link
               to="/finance/movements"
               className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps"
@@ -210,7 +285,11 @@ export function EfePage() {
           </span>
         ))}
         <p className="w-full text-[11px] text-text-muted sm:ml-auto sm:w-auto">
-          Árbol de cuentas · aún no calcula margen / EBITDA / NIAT como líneas derivadas
+          {viewMode === "pct"
+            ? `% sobre 1. VENTAS NETAS · mes act. ${focus.current.slice(5)}${
+                focus.previous ? ` · mes ant. ${focus.previous.slice(5)}` : ""
+              }`
+            : "Árbol de cuentas · toggle % ventas para ver peso sobre ventas"}
         </p>
       </Card>
 
@@ -225,10 +304,29 @@ export function EfePage() {
                   Cuenta
                 </th>
                 {months.map((m) => (
-                  <th key={m} className="px-2.5 py-2.5 text-right text-[10px] label-caps tracking-wider">
+                  <th
+                    key={m}
+                    className={cn(
+                      "px-2.5 py-2.5 text-right text-[10px] label-caps tracking-wider",
+                      m === focus.current && "bg-sage-500/30",
+                      m === focus.previous && "bg-white/10",
+                    )}
+                  >
                     {m.slice(5)}
+                    {m === focus.current ? " · act" : m === focus.previous ? " · ant" : ""}
                   </th>
                 ))}
+                {viewMode === "pct" ? (
+                  <>
+                    <th className="bg-sage-500/40 px-2.5 py-2.5 text-right text-[10px] label-caps">
+                      % mes act.
+                    </th>
+                    <th className="bg-white/10 px-2.5 py-2.5 text-right text-[10px] label-caps">
+                      % mes ant.
+                    </th>
+                    <th className="px-2.5 py-2.5 text-right text-[10px] label-caps">Δ pp</th>
+                  </>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -236,6 +334,18 @@ export function EfePage() {
                 const style = KIND_STYLE[line.kind] || KIND_STYLE.PASIVO;
                 const type = depthType(line.depth, line.is_leaf);
                 const stickyBg = line.depth === 0 ? style.sticky : line.is_leaf ? "bg-warm-white" : style.sticky;
+                const curPct = pctOfSales(
+                  Number(line.real[focus.current] || 0),
+                  salesByMonth[focus.current] || 0,
+                );
+                const prevPct = focus.previous
+                  ? pctOfSales(
+                      Number(line.real[focus.previous] || 0),
+                      salesByMonth[focus.previous] || 0,
+                    )
+                  : null;
+                const deltaPp =
+                  curPct != null && prevPct != null ? curPct - prevPct : null;
                 return (
                   <tr
                     key={line.code}
@@ -246,12 +356,7 @@ export function EfePage() {
                       line.depth === 0 && style.accent,
                     )}
                   >
-                    <td
-                      className={cn(
-                        "sticky left-0 z-[1] px-2 py-1.5 whitespace-nowrap",
-                        stickyBg,
-                      )}
-                    >
+                    <td className={cn("sticky left-0 z-[1] px-2 py-1.5 whitespace-nowrap", stickyBg)}>
                       <button
                         type="button"
                         className={cn("flex max-w-[320px] items-center gap-1.5 text-left", style.label, type.name)}
@@ -277,20 +382,62 @@ export function EfePage() {
                       </button>
                     </td>
                     {months.map((m) => {
-                      const v = Number(line.real[m] || 0);
+                      const cell = cellDisplay(line, m);
                       return (
                         <td
                           key={m}
+                          title={cell.title}
                           className={cn(
                             "px-2 py-1.5 text-right tabular-nums",
                             type.amount,
-                            amountClass(v, line.kind),
+                            cell.cls,
+                            m === focus.current && "bg-sage-500/10",
+                            m === focus.previous && viewMode === "pct" && "bg-cream-100/80",
                           )}
                         >
-                          {v ? formatCOP(v) : "—"}
+                          {cell.text}
                         </td>
                       );
                     })}
+                    {viewMode === "pct" ? (
+                      <>
+                        <td
+                          className={cn(
+                            "bg-sage-500/10 px-2 py-1.5 text-right tabular-nums font-semibold",
+                            type.amount,
+                            curPct == null ? "text-text-soft" : "text-green-900",
+                          )}
+                        >
+                          {formatPct(curPct)}
+                        </td>
+                        <td
+                          className={cn(
+                            "bg-cream-100/80 px-2 py-1.5 text-right tabular-nums",
+                            type.amount,
+                            prevPct == null ? "text-text-soft" : "text-text-muted",
+                          )}
+                        >
+                          {formatPct(prevPct)}
+                        </td>
+                        <td
+                          className={cn(
+                            "px-2 py-1.5 text-right tabular-nums font-medium",
+                            type.amount,
+                            deltaPp == null
+                              ? "text-text-soft"
+                              : deltaPp > 0.05
+                                ? "text-terracotta-600"
+                                : deltaPp < -0.05
+                                  ? "text-sage-500"
+                                  : "text-text-muted",
+                          )}
+                        >
+                          {deltaPp == null
+                            ? "—"
+                            : `${deltaPp > 0 ? "+" : ""}${deltaPp.toFixed(1)} pp`}
+                        </td>
+                      </>
+                    ) : null}
                   </tr>
                 );
               })}
