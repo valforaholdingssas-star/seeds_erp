@@ -15,13 +15,16 @@ from apps.expenses.models import (
 )
 from apps.expenses.serializers import (
     BulkUpdateSerializer,
+    CreatePayableSerializer,
     ExpenseAttachmentSerializer,
     ExpenseSerializer,
     ExpenseStatusSerializer,
+    MarkPaidSerializer,
     ReconcileSerializer,
     TransitionSerializer,
 )
 from apps.expenses.services.amortization import regenerate_amortization
+from apps.expenses.services.payables import create_payable, mark_payable_paid
 from apps.expenses.services.reconcile import reconcile_expense, suggest_movements
 from apps.expenses.services.seed import seed_expense_statuses
 from apps.expenses.services.transitions import TransitionError, transition_expense
@@ -94,7 +97,14 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         self.module_roles = ["CONTABILIDAD", "SUPERVISOR", "VIEWER", "ADMIN"]
-        if self.action in {"list", "retrieve", "reimbursements", "iva", "suggest_movements"}:
+        if self.action in {
+            "list",
+            "retrieve",
+            "reimbursements",
+            "iva",
+            "suggest_movements",
+            "payables",
+        }:
             return [IsModuleRole()]
         self.module_roles = ["CONTABILIDAD", "SUPERVISOR", "ADMIN"]
         return [IsModuleRole()]
@@ -211,6 +221,102 @@ class ExpenseViewSet(viewsets.ModelViewSet):
                 for m in movs
             ]
         )
+
+    @action(detail=False, methods=["get", "post"])
+    def payables(self, request):
+        """Cola Notion-like: reembolsos + cuentas por pagar."""
+        if request.method == "POST":
+            ser = CreatePayableSerializer(data=request.data)
+            ser.is_valid(raise_exception=True)
+            data = ser.validated_data
+            try:
+                expense = create_payable(
+                    kind=data["kind"],
+                    title=data["title"],
+                    amount=data["amount"],
+                    expense_date=data["expense_date"],
+                    concept=data.get("concept") or "",
+                    bank_account_id=data.get("bank_account"),
+                    efe_account_id=data.get("efe_account"),
+                    responsible_id=data.get("responsible"),
+                    actor=request.user,
+                )
+            except TransitionError as exc:
+                return Response({"detail": str(exc)}, status=400)
+            expense = self.get_queryset().get(pk=expense.pk)
+            return Response(
+                ExpenseSerializer(expense, context={"request": request}).data,
+                status=201,
+            )
+
+        qs = self.filter_queryset(
+            self.get_queryset().filter(
+                status__key__in=["REEMBOLSOS_POR_PAGAR", "CUENTAS_POR_PAGAR"]
+            )
+        )
+        kind = request.query_params.get("kind")
+        if kind == "reembolso":
+            qs = qs.filter(status__key="REEMBOLSOS_POR_PAGAR")
+        elif kind == "cuenta":
+            qs = qs.filter(status__key="CUENTAS_POR_PAGAR")
+
+        reembolsos = qs.filter(status__key="REEMBOLSOS_POR_PAGAR")
+        cuentas = qs.filter(status__key="CUENTAS_POR_PAGAR")
+        ser_ctx = {"request": request}
+        return Response(
+            {
+                "reembolsos": {
+                    "count": reembolsos.count(),
+                    "total_amount": str(reembolsos.aggregate(s=Sum("amount"))["s"] or 0),
+                    "results": ExpenseSerializer(
+                        reembolsos[:200], many=True, context=ser_ctx
+                    ).data,
+                },
+                "cuentas": {
+                    "count": cuentas.count(),
+                    "total_amount": str(cuentas.aggregate(s=Sum("amount"))["s"] or 0),
+                    "results": ExpenseSerializer(
+                        cuentas[:200], many=True, context=ser_ctx
+                    ).data,
+                },
+            }
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="mark-paid",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def mark_paid(self, request, pk=None):
+        expense = self.get_object()
+        # Multipart fields come as strings; coerce booleans.
+        payload = {
+            "payment_date": request.data.get("payment_date"),
+            "bank_account": request.data.get("bank_account") or None,
+            "efe_account": request.data.get("efe_account") or None,
+            "register_in_efe": str(request.data.get("register_in_efe", "")).lower()
+            in {"1", "true", "yes", "on"},
+        }
+        ser = MarkPaidSerializer(data=payload)
+        ser.is_valid(raise_exception=True)
+        try:
+            expense, warnings = mark_payable_paid(
+                expense,
+                payment_date=ser.validated_data["payment_date"],
+                bank_account_id=ser.validated_data.get("bank_account"),
+                efe_account_id=ser.validated_data.get("efe_account"),
+                register_in_efe=ser.validated_data.get("register_in_efe", False),
+                payment_proof=request.FILES.get("payment_proof"),
+                provider_invoice=request.FILES.get("provider_invoice"),
+                actor=request.user,
+            )
+        except TransitionError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        expense = self.get_queryset().get(pk=expense.pk)
+        data = ExpenseSerializer(expense, context={"request": request}).data
+        data["warnings"] = warnings
+        return Response(data)
 
     @action(detail=False, methods=["get"])
     def reimbursements(self, request):

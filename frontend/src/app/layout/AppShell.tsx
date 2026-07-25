@@ -30,6 +30,7 @@ import {
   Upload,
   Radar,
   Banknote,
+  HandCoins,
 } from "lucide-react";
 import { fetchMe } from "@/features/auth/api";
 import { useAuthStore, type UserRole } from "@/features/auth/store";
@@ -251,6 +252,14 @@ const navGroups: NavGroup[] = [
         roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
         module: "finance",
         keywords: ["validacion", "bancos", "reportes", "cuadre"],
+      },
+      {
+        to: "/expenses/payables",
+        label: "Por pagar",
+        icon: HandCoins,
+        roles: ["ADMIN", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
+        module: "expenses",
+        keywords: ["reembolsos", "cuentas por pagar", "notion", "obligaciones"],
       },
       {
         to: "/expenses",

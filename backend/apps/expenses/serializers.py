@@ -188,3 +188,21 @@ class BulkUpdateSerializer(serializers.Serializer):
 
 class ReconcileSerializer(serializers.Serializer):
     bank_movement = serializers.UUIDField()
+
+
+class CreatePayableSerializer(serializers.Serializer):
+    kind = serializers.ChoiceField(choices=["reembolso", "cuenta"])
+    title = serializers.CharField(max_length=512)
+    amount = serializers.DecimalField(max_digits=16, decimal_places=2)
+    expense_date = serializers.DateField()
+    concept = serializers.CharField(required=False, allow_blank=True, default="")
+    bank_account = serializers.UUIDField(required=False, allow_null=True)
+    efe_account = serializers.UUIDField(required=False, allow_null=True)
+    responsible = serializers.UUIDField(required=False, allow_null=True)
+
+
+class MarkPaidSerializer(serializers.Serializer):
+    payment_date = serializers.DateField()
+    bank_account = serializers.UUIDField(required=False, allow_null=True)
+    efe_account = serializers.UUIDField(required=False, allow_null=True)
+    register_in_efe = serializers.BooleanField(required=False, default=False)
