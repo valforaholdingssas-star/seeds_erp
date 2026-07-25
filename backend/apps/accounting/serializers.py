@@ -83,3 +83,11 @@ class RefundCreateSerializer(serializers.Serializer):
 
 class IdsSerializer(serializers.Serializer):
     ids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
+
+
+class OptionalIdsSerializer(serializers.Serializer):
+    """Empty/omitted ids = process all matching records (caller decides scope)."""
+
+    ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, allow_empty=True, default=list
+    )

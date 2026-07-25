@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.accounting.models import Customer, Invoice, InvoiceStatus, Refund, RefundStatus
@@ -108,6 +108,82 @@ def bulk_sync_customers_to_alegra(ids: list, *, actor=None) -> dict:
         except Exception as exc:
             errors.append({"id": str(customer.id), "name": customer.name, "detail": str(exc)[:500]})
     return {"synced": ok, "failed": len(errors), "errors": errors}
+
+
+def normalize_customer_documents(ids: list | None = None, *, actor=None) -> dict:
+    """Strip non-digits from Customer.id_number (Alegra CO requires numeric docs).
+
+    If ``ids`` is empty/None, processes every customer whose document still has
+    non-digit characters. Skips unchanged rows; reports collisions and empty results.
+    """
+    qs = Customer.objects.all().order_by("created_at")
+    if ids:
+        qs = qs.filter(id__in=ids)
+    else:
+        # Only rows that still contain separators/letters.
+        qs = qs.exclude(id_number__regex=r"^\d+$")
+
+    updated = 0
+    skipped = 0
+    errors: list[dict] = []
+
+    for customer in qs.iterator():
+        raw = (customer.id_number or "").strip()
+        digits = alegra_client._digits_only(raw)
+        if digits == raw:
+            skipped += 1
+            continue
+        if not digits:
+            errors.append(
+                {
+                    "id": str(customer.id),
+                    "name": customer.name,
+                    "detail": f"Sin dígitos tras formatear ('{raw}'). Corrige el documento.",
+                }
+            )
+            continue
+        if Customer.objects.filter(id_type=customer.id_type, id_number=digits).exclude(
+            pk=customer.pk
+        ).exists():
+            errors.append(
+                {
+                    "id": str(customer.id),
+                    "name": customer.name,
+                    "detail": (
+                        f"Conflicto: '{raw}' → '{digits}' ya existe para "
+                        f"{customer.id_type}. Revisa duplicados."
+                    ),
+                }
+            )
+            continue
+        previous = customer.id_number
+        customer.id_number = digits
+        try:
+            customer.save(update_fields=["id_number", "updated_at"])
+        except IntegrityError:
+            errors.append(
+                {
+                    "id": str(customer.id),
+                    "name": customer.name,
+                    "detail": f"Conflicto al guardar '{digits}' (documento duplicado).",
+                }
+            )
+            continue
+        updated += 1
+        log_audit_event(
+            actor=actor,
+            action="CUSTOMER_DOC_NORMALIZED",
+            entity="Customer",
+            entity_id=str(customer.id),
+            metadata={"from": previous, "to": digits},
+        )
+
+    return {
+        "updated": updated,
+        "skipped": skipped,
+        "failed": len(errors),
+        "errors": errors,
+    }
 
 @transaction.atomic
 def issue_invoice(invoice_id, *, actor=None) -> Invoice:

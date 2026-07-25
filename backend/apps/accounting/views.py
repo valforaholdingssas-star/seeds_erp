@@ -9,6 +9,7 @@ from apps.accounting.models import Customer, Invoice, InvoiceStatus, Refund
 from apps.accounting.serializers import (
     CustomerSerializer,
     IdsSerializer,
+    OptionalIdsSerializer,
     InvoiceSerializer,
     RefundCreateSerializer,
     RefundSerializer,
@@ -18,6 +19,7 @@ from apps.accounting.services.invoicing import (
     confirm_void,
     create_refund,
     issue_invoice,
+    normalize_customer_documents,
     reconcile_invoice,
     sync_customer_to_alegra,
 )
@@ -58,6 +60,15 @@ class CustomerViewSet(viewsets.ModelViewSet):
         result = bulk_sync_customers_to_alegra(
             ser.validated_data["ids"], actor=request.user
         )
+        status_code = 200 if result["failed"] == 0 else 207
+        return Response(result, status=status_code)
+
+    @action(detail=False, methods=["post"], url_path="bulk-normalize-documents")
+    def bulk_normalize_documents(self, request):
+        ser = OptionalIdsSerializer(data=request.data or {})
+        ser.is_valid(raise_exception=True)
+        ids = ser.validated_data.get("ids") or []
+        result = normalize_customer_documents(ids or None, actor=request.user)
         status_code = 200 if result["failed"] == 0 else 207
         return Response(result, status=status_code)
 

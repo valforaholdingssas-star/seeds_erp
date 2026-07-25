@@ -29,6 +29,13 @@ type BulkResult = {
   errors: { id: string; name?: string; detail: string }[];
 };
 
+type NormalizeResult = {
+  updated: number;
+  skipped: number;
+  failed: number;
+  errors: { id: string; name?: string; detail: string }[];
+};
+
 function errDetail(err: unknown): string {
   const ax = err as { response?: { data?: { detail?: string | object } }; message?: string };
   const d = ax.response?.data?.detail;
@@ -113,6 +120,58 @@ export function CustomersPage() {
     },
   });
 
+  const normalizeDocs = useMutation({
+    mutationFn: async (ids: string[] | null) => {
+      const { data } = await apiClient.post<NormalizeResult>(
+        "/accounting/customers/bulk-normalize-documents/",
+        ids?.length ? { ids } : {},
+      );
+      return data;
+    },
+    onSuccess: (data) => {
+      setSelected([]);
+      const failHint =
+        data.failed > 0
+          ? ` · Fallidos: ${data.errors
+              .slice(0, 3)
+              .map((e) => `${e.name || e.id}: ${e.detail}`)
+              .join(" | ")}${data.errors.length > 3 ? "…" : ""}`
+          : "";
+      setMsg(
+        `Documentos formateados: ${data.updated} actualizado(s)` +
+          (data.skipped ? `, ${data.skipped} sin cambios` : "") +
+          ".",
+      );
+      if (data.failed > 0) {
+        setErr(`${data.failed} no se pudieron formatear${failHint}`);
+      } else {
+        setErr(null);
+      }
+      void qc.invalidateQueries({ queryKey: ["customers"] });
+    },
+    onError: (e) => {
+      setMsg(null);
+      setErr(errDetail(e));
+    },
+  });
+
+  function runNormalize(ids: string[] | null) {
+    const scope =
+      ids && ids.length > 0
+        ? `los ${ids.length} seleccionado(s)`
+        : "todos los documentos con caracteres no numéricos";
+    if (
+      !window.confirm(
+        `¿Formatear ${scope}?\nSe quitarán puntos, guiones y letras; solo quedarán números.`,
+      )
+    ) {
+      return;
+    }
+    setErr(null);
+    setMsg(null);
+    normalizeDocs.mutate(ids);
+  }
+
   const columns = useMemo<ColumnDef<Customer, unknown>[]>(
     () => [
       {
@@ -181,6 +240,23 @@ export function CustomersPage() {
         title="Clientes"
         actions={
           <>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={normalizeDocs.isPending}
+              onClick={() =>
+                runNormalize(
+                  selected.length > 0 ? selected.map((s) => s.id) : null,
+                )
+              }
+            >
+              {normalizeDocs.isPending
+                ? "Formateando…"
+                : selected.length > 0
+                  ? `Formatear docs (${selected.length})`
+                  : "Formatear documentos"}
+            </Button>
             <Link
               to="/accounting"
               className="inline-flex min-h-7 items-center rounded-[999px] border border-line px-3 text-[10px] label-caps"
@@ -225,23 +301,36 @@ export function CustomersPage() {
         onSelectionChange={setSelected}
         bulkActions={
           selected.length > 0 ? (
-            <Button
-              type="button"
-              size="sm"
-              disabled={syncBulk.isPending}
-              onClick={() => {
-                setErr(null);
-                setMsg(null);
-                syncBulk.mutate(selected.map((s) => s.id));
-              }}
-            >
-              {syncBulk.isPending
-                ? "Sincronizando…"
-                : `Sincronizar Alegra (${selected.length})`}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={normalizeDocs.isPending}
+                onClick={() => runNormalize(selected.map((s) => s.id))}
+              >
+                {normalizeDocs.isPending
+                  ? "Formateando…"
+                  : `Formatear docs (${selected.length})`}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={syncBulk.isPending}
+                onClick={() => {
+                  setErr(null);
+                  setMsg(null);
+                  syncBulk.mutate(selected.map((s) => s.id));
+                }}
+              >
+                {syncBulk.isPending
+                  ? "Sincronizando…"
+                  : `Sincronizar Alegra (${selected.length})`}
+              </Button>
+            </div>
           ) : null
         }
-        hint="Selecciona varios clientes para sincronizarlos masivamente con Alegra."
+        hint="Usa «Formatear documentos» para dejar solo números (CC/NIT). Luego sincroniza con Alegra."
       />
     </div>
   );

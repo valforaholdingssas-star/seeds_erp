@@ -102,3 +102,31 @@ def test_invoice_api_issue(api, admin_user, sale):
     reconciled = api.post(f"/api/v1/accounting/invoices/{inv.id}/reconcile/")
     assert reconciled.status_code == 200
     assert reconciled.data["status"] in {"POR_GENERAR", "GENERADA"}
+
+
+@pytest.mark.django_db
+def test_bulk_normalize_documents(api, admin_user, db):
+    from apps.accounting.models import Customer
+
+    dirty = Customer.objects.create(
+        name="Con guiones", id_type="CC", id_number="1.234.567-8"
+    )
+    clean = Customer.objects.create(
+        name="Ya limpio", id_type="CC", id_number="9876543210"
+    )
+    emptyish = Customer.objects.create(
+        name="Sin digitos", id_type="CC", id_number="SIN-DOC-ABC"
+    )
+
+    api.force_authenticate(user=admin_user)
+    res = api.post("/api/v1/accounting/customers/bulk-normalize-documents/", {})
+    assert res.status_code == 207
+    assert res.data["updated"] == 1
+    assert res.data["failed"] == 1
+
+    dirty.refresh_from_db()
+    clean.refresh_from_db()
+    emptyish.refresh_from_db()
+    assert dirty.id_number == "12345678"
+    assert clean.id_number == "9876543210"
+    assert emptyish.id_number == "SIN-DOC-ABC"

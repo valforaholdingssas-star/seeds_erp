@@ -363,6 +363,7 @@ ACTION_TO_CRUD: dict[str, Crud] = {
     "confirm_void": "d",
     "sync_alegra": "u",
     "bulk_sync_alegra": "u",
+    "bulk_normalize_documents": "u",
     "reprocess": "u",
     "format_ai": "u",
     "cancel_local": "d",
