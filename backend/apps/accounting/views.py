@@ -117,6 +117,17 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["status", "customer", "number", "idempotency_key"]
     search_fields = ["number", "alegra_id", "sale__external_id", "customer__name", "customer__id_number"]
     ordering_fields = ["created_at", "total", "status", "confirmed_at"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        ready = (self.request.query_params.get("ready") or "").strip().lower()
+        if ready in {"1", "true", "yes"}:
+            qs = qs.filter(
+                status__in=[InvoiceStatus.POR_GENERAR, InvoiceStatus.FALLIDA],
+                customer__alegra_synced=True,
+            ).exclude(customer__alegra_id="")
+        return qs
 
     def get_permissions(self):
         self.module_roles = ["CONTABILIDAD", "SUPERVISOR", "VIEWER", "VENTAS"]
