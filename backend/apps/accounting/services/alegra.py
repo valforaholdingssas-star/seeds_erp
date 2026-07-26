@@ -343,6 +343,8 @@ def _put_contact(
         for k in (
             "name",
             "nameObject",
+            "identificationObject",
+            "identification",
             "kindOfPerson",
             "regime",
             "email",

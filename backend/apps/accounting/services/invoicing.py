@@ -113,15 +113,21 @@ def sync_customer_to_alegra(customer: Customer, *, actor=None, force: bool = Fal
         customer.name = display
         customer.save(update_fields=["name", "updated_at"])
 
-    if customer.alegra_id and customer.alegra_synced and not force:
-        # Re-push name/address so weak lead-id names get fixed on click.
+    if customer.alegra_id:
+        # Always refresh Alegra contact (fixes weak lead-id names on re-sync).
         alegra_client.update_contact(customer)
+        if not customer.alegra_synced or force:
+            customer.alegra_synced = True
+            customer.save(update_fields=["alegra_synced", "updated_at"])
+            log_audit_event(
+                actor=actor,
+                action="CUSTOMER_SYNCED_ALEGRA",
+                entity="Customer",
+                entity_id=str(customer.id),
+                metadata={"alegra_id": customer.alegra_id, "updated": True},
+            )
         return customer
-    if customer.alegra_id and not force:
-        alegra_client.update_contact(customer)
-        customer.alegra_synced = True
-        customer.save(update_fields=["alegra_synced", "updated_at"])
-        return customer
+
     body = alegra_client.create_or_find_contact(customer)
     alegra_id = str(body.get("id") or "").strip()
     if not alegra_id:
