@@ -196,6 +196,56 @@ export function CustomersPage() {
     normalizeDocs.mutate(ids);
   }
 
+  const healNames = useMutation({
+    mutationFn: async (ids: string[] | null) => {
+      const { data } = await apiClient.post<{
+        updated: number;
+        skipped: number;
+        failed: number;
+        processed: number;
+        errors: { id: string; name?: string; detail: string }[];
+      }>(
+        "/accounting/customers/bulk-heal-names/",
+        ids?.length ? { ids, limit: 200 } : { limit: 80 },
+      );
+      return data;
+    },
+    onSuccess: (data) => {
+      setMsg(
+        `Nombres actualizados desde Kommo: ${data.updated} · sin cambio ${data.skipped}` +
+          (data.failed ? ` · fallidos ${data.failed}` : "") +
+          ".",
+      );
+      if (data.failed > 0) {
+        setErr(data.errors[0]?.detail || "Algunos nombres no se pudieron actualizar.");
+      } else {
+        setErr(null);
+      }
+      void qc.invalidateQueries({ queryKey: ["customers"] });
+    },
+    onError: (e) => {
+      setMsg(null);
+      setErr(errDetail(e));
+    },
+  });
+
+  function runHealNames(ids: string[] | null) {
+    const scope =
+      ids && ids.length > 0
+        ? `los ${ids.length} seleccionado(s)`
+        : "hasta 80 clientes con nombre débil (ID de lead)";
+    if (
+      !window.confirm(
+        `¿Actualizar nombres desde Kommo (${scope})?\nSe usa el nombre del contacto en Kommo.`,
+      )
+    ) {
+      return;
+    }
+    setErr(null);
+    setMsg(null);
+    healNames.mutate(ids);
+  }
+
   const columns = useMemo<ColumnDef<Customer, unknown>[]>(
     () => [
       {
@@ -266,6 +316,23 @@ export function CustomersPage() {
         title="Clientes"
         actions={
           <>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={healNames.isPending}
+              onClick={() =>
+                runHealNames(
+                  selected.length > 0 ? selected.map((s) => s.id) : null,
+                )
+              }
+            >
+              {healNames.isPending
+                ? "Actualizando nombres…"
+                : selected.length > 0
+                  ? `Nombres Kommo (${selected.length})`
+                  : "Actualizar nombres"}
+            </Button>
             <Button
               type="button"
               size="sm"

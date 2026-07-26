@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from apps.accounting.models import Customer, Invoice, InvoiceStatus, Refund, RefundStatus
@@ -234,6 +234,73 @@ def normalize_customer_documents(ids: list | None = None, *, actor=None) -> dict
         "updated": updated,
         "skipped": skipped,
         "failed": len(errors),
+        "errors": errors,
+    }
+
+
+def bulk_heal_customer_names(ids: list | None = None, *, actor=None, limit: int = 80) -> dict:
+    """Refresh Customer.name from Kommo contact.name for weak/lead-id names."""
+    from apps.accounting.services.alegra import (
+        _is_weak_person_name,
+        resolve_customer_display_name,
+    )
+
+    qs = Customer.objects.all().order_by("created_at")
+    if ids:
+        qs = qs.filter(id__in=ids)
+    else:
+        # Heuristic: numeric-looking names or short placeholders.
+        qs = qs.filter(
+            models.Q(name__regex=r"^\d{5,}$")
+            | models.Q(name__istartswith="Lead #")
+            | models.Q(name__istartswith="Cliente ")
+            | models.Q(name="")
+        )
+
+    updated = 0
+    skipped = 0
+    errors: list[dict] = []
+    processed = 0
+
+    for customer in qs[:limit]:
+        processed += 1
+        previous = (customer.name or "").strip()
+        try:
+            display = resolve_customer_display_name(customer, refresh_kommo=True)
+        except Exception as exc:
+            errors.append(
+                {
+                    "id": str(customer.id),
+                    "name": previous,
+                    "detail": str(exc)[:400],
+                }
+            )
+            continue
+        if not display or display == previous:
+            skipped += 1
+            continue
+        # Avoid replacing a good name with a weak fallback.
+        if _is_weak_person_name(display, id_number=customer.id_number) and not _is_weak_person_name(
+            previous, id_number=customer.id_number
+        ):
+            skipped += 1
+            continue
+        customer.name = display
+        customer.save(update_fields=["name", "updated_at"])
+        updated += 1
+        log_audit_event(
+            actor=actor,
+            action="CUSTOMER_NAME_HEALED",
+            entity="Customer",
+            entity_id=str(customer.id),
+            metadata={"from": previous, "to": display},
+        )
+
+    return {
+        "updated": updated,
+        "skipped": skipped,
+        "failed": len(errors),
+        "processed": processed,
         "errors": errors,
     }
 

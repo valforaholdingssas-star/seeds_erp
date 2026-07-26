@@ -364,6 +364,7 @@ ACTION_TO_CRUD: dict[str, Crud] = {
     "sync_alegra": "u",
     "bulk_sync_alegra": "u",
     "bulk_normalize_documents": "u",
+    "bulk_heal_names": "u",
     "reprocess": "u",
     "format_ai": "u",
     "cancel_local": "d",

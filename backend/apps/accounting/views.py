@@ -15,6 +15,7 @@ from apps.accounting.serializers import (
     RefundSerializer,
 )
 from apps.accounting.services.invoicing import (
+    bulk_heal_customer_names,
     bulk_sync_customers_to_alegra,
     confirm_void,
     create_refund,
@@ -23,6 +24,7 @@ from apps.accounting.services.invoicing import (
     reconcile_invoice,
     sync_customer_to_alegra,
 )
+from apps.accounting.services.iva import build_iva_dashboard
 from apps.accounting.tasks import enqueue_issue_invoices
 from apps.logistics.models import BatchItemStatus, BatchJob, BatchJobStatus, BatchJobType, BatchJobItem
 from apps.logistics.serializers import BatchJobSerializer
@@ -69,6 +71,18 @@ class CustomerViewSet(viewsets.ModelViewSet):
         ser.is_valid(raise_exception=True)
         ids = ser.validated_data.get("ids") or []
         result = normalize_customer_documents(ids or None, actor=request.user)
+        status_code = 200 if result["failed"] == 0 else 207
+        return Response(result, status=status_code)
+
+    @action(detail=False, methods=["post"], url_path="bulk-heal-names")
+    def bulk_heal_names(self, request):
+        ser = OptionalIdsSerializer(data=request.data or {})
+        ser.is_valid(raise_exception=True)
+        ids = ser.validated_data.get("ids") or []
+        limit = int(request.data.get("limit") or 80)
+        result = bulk_heal_customer_names(
+            ids or None, actor=request.user, limit=max(1, min(limit, 200))
+        )
         status_code = 200 if result["failed"] == 0 else 207
         return Response(result, status=status_code)
 
@@ -168,41 +182,43 @@ class IvaSummaryView(APIView):
     def get(self, request):
         date_from = parse_date(request.query_params.get("from") or "")
         date_to = parse_date(request.query_params.get("to") or "")
-        channel = request.query_params.get("channel")
-
-        sales = ConsolidatedSale.objects.filter(state=SaleState.ACTIVE)
-        invoices = Invoice.objects.filter(status=InvoiceStatus.GENERADA)
-        if date_from:
-            sales = sales.filter(closed_at__date__gte=date_from)
-            invoices = invoices.filter(confirmed_at__date__gte=date_from)
-        if date_to:
-            sales = sales.filter(closed_at__date__lte=date_to)
-            invoices = invoices.filter(confirmed_at__date__lte=date_to)
-        if channel:
-            sales = sales.filter(source=channel)
-            invoices = invoices.filter(sale__source=channel)
-
-        sales_agg = sales.aggregate(
-            iva=Sum("iva_generated"),
-            net=Sum("net_value"),
-            total=Sum("total_value"),
-        )
-        inv_agg = invoices.aggregate(iva=Sum("iva"), total=Sum("total"))
-        return Response(
-            {
-                "from": date_from,
-                "to": date_to,
-                "channel": channel,
-                "sales": {
-                    "iva_generated": str(sales_agg["iva"] or 0),
-                    "net_value": str(sales_agg["net"] or 0),
-                    "total_value": str(sales_agg["total"] or 0),
-                    "count": sales.count(),
-                },
-                "invoices": {
-                    "iva": str(inv_agg["iva"] or 0),
-                    "total": str(inv_agg["total"] or 0),
-                    "count": invoices.count(),
-                },
+        year_raw = (request.query_params.get("year") or "").strip()
+        year = int(year_raw) if year_raw.isdigit() else None
+        data = build_iva_dashboard(year=year, date_from=date_from, date_to=date_to)
+        if request.query_params.get("channel"):
+            # Channel filter kept for compatibility on the simple range cards.
+            channel = request.query_params.get("channel")
+            sales = ConsolidatedSale.objects.filter(state=SaleState.ACTIVE, source=channel)
+            invoices = Invoice.objects.filter(status=InvoiceStatus.GENERADA, sale__source=channel)
+            if date_from:
+                sales = sales.filter(closed_at__date__gte=date_from)
+                invoices = invoices.filter(confirmed_at__date__gte=date_from)
+            if date_to:
+                sales = sales.filter(closed_at__date__lte=date_to)
+                invoices = invoices.filter(confirmed_at__date__lte=date_to)
+            sales_agg = sales.aggregate(
+                iva=Sum("iva_generated"),
+                net=Sum("net_value"),
+                total=Sum("total_value"),
+            )
+            inv_agg = invoices.aggregate(iva=Sum("iva"), total=Sum("total"))
+            data["channel"] = channel
+            data["iva_recaudado"]["amount"] = str(sales_agg["iva"] or 0)
+            data["iva_recaudado"]["net_value"] = str(sales_agg["net"] or 0)
+            data["iva_recaudado"]["total_value"] = str(sales_agg["total"] or 0)
+            data["iva_recaudado"]["count"] = sales.count()
+            data["iva_facturado"]["amount"] = str(inv_agg["iva"] or 0)
+            data["iva_facturado"]["total"] = str(inv_agg["total"] or 0)
+            data["iva_facturado"]["count"] = invoices.count()
+            data["sales"] = {
+                "iva_generated": data["iva_recaudado"]["amount"],
+                "net_value": data["iva_recaudado"]["net_value"],
+                "total_value": data["iva_recaudado"]["total_value"],
+                "count": data["iva_recaudado"]["count"],
             }
-        )
+            data["invoices"] = {
+                "iva": data["iva_facturado"]["amount"],
+                "total": data["iva_facturado"]["total"],
+                "count": data["iva_facturado"]["count"],
+            }
+        return Response(data)
