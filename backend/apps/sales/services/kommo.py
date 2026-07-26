@@ -144,6 +144,25 @@ def upsert_kommo_from_enriched(
     payment_raw = _cf(cfs, field_name="Medio de pago")
     payment_method = resolve_payment_method(payment_raw, actor=actor)
 
+    lead_id = str(lead.get("id") or "")
+    contact_name = (contact.get("name") or "").strip()
+    lead_name = (lead.get("name") or "").strip()
+    # Kommo often puts the numeric lead id as contact/lead name — prefer email local part.
+    def _weak_name(value: str) -> bool:
+        v = (value or "").strip()
+        return (not v) or v.isdigit() or v == lead_id
+
+    customer_name = contact_name if not _weak_name(contact_name) else ""
+    if not customer_name and lead_name and not _weak_name(lead_name):
+        customer_name = lead_name
+    if not customer_name and email:
+        local = email.split("@", 1)[0]
+        local = local.replace(".", " ").replace("_", " ").replace("+", " ").strip()
+        if local and not local.isdigit():
+            customer_name = " ".join(p.capitalize() for p in local.split())
+    if not customer_name:
+        customer_name = contact_name or lead_name or lead_id
+
     sale, _ = KommoSale.objects.update_or_create(
         external_id=lead_id,
         defaults={
@@ -158,7 +177,7 @@ def upsert_kommo_from_enriched(
             "status": "processing",
             "stage": "Cierre ganado",
             "commercial_raw": _cf(cfs, field_name="Comercial"),
-            "customer_name": contact.get("name") or lead.get("name") or "",
+            "customer_name": customer_name,
             "email": email,
             "phone": phone,
             "id_number": id_number,

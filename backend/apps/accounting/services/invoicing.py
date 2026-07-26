@@ -12,12 +12,29 @@ from apps.sales.services.normalization import withdraw_from_consolidated
 
 
 def ensure_customer_from_sale(sale, *, actor=None) -> Customer:
+    from apps.accounting.services.alegra import (
+        _is_weak_person_name,
+        _name_from_email,
+        resolve_customer_display_name,
+    )
+
     id_number = (sale.id_number or "").strip() or f"SIN-DOC-{sale.external_id}"
+    # Normalize document early so get_or_create matches formatted CC/NIT.
+    from apps.accounting.services.alegra import _digits_only
+
+    digits = _digits_only(id_number)
+    if digits and not id_number.upper().startswith("SIN-DOC"):
+        id_number = digits
+
+    raw_name = (sale.customer_name or "").strip()
+    if _is_weak_person_name(raw_name, id_number=id_number):
+        raw_name = _name_from_email(sale.email or "") or raw_name
+
     customer, created = Customer.objects.get_or_create(
         id_type="CC",
         id_number=id_number,
         defaults={
-            "name": sale.customer_name or id_number,
+            "name": raw_name or id_number,
             "email": sale.email or "",
             "phone": sale.phone or "",
             "address": sale.address_raw or "",
@@ -28,17 +45,35 @@ def ensure_customer_from_sale(sale, *, actor=None) -> Customer:
         # refresh soft fields
         changed = False
         for field, value in [
-            ("name", sale.customer_name or customer.name),
+            ("name", raw_name or customer.name),
             ("email", sale.email or customer.email),
             ("phone", sale.phone or customer.phone),
             ("address", sale.address_raw or customer.address),
             ("city", sale.city_raw or customer.city),
         ]:
             if value and getattr(customer, field) != value:
+                # Don't overwrite a good name with a weak Kommo lead-id.
+                if field == "name" and _is_weak_person_name(
+                    value, id_number=customer.id_number
+                ):
+                    continue
+                if field == "name" and not _is_weak_person_name(
+                    customer.name, id_number=customer.id_number
+                ):
+                    continue
                 setattr(customer, field, value)
                 changed = True
+        healed = resolve_customer_display_name(customer)
+        if healed != (customer.name or "").strip():
+            customer.name = healed
+            changed = True
         if changed:
             customer.save()
+    else:
+        healed = resolve_customer_display_name(customer)
+        if healed != (customer.name or "").strip():
+            customer.name = healed
+            customer.save(update_fields=["name", "updated_at"])
     return customer
 
 
@@ -71,9 +106,19 @@ def ensure_invoice_for_sale(sale, *, actor=None) -> Invoice | None:
 
 @transaction.atomic
 def sync_customer_to_alegra(customer: Customer, *, actor=None, force: bool = False) -> Customer:
+    from apps.accounting.services.alegra import resolve_customer_display_name
+
+    display = resolve_customer_display_name(customer)
+    if display and display != (customer.name or "").strip():
+        customer.name = display
+        customer.save(update_fields=["name", "updated_at"])
+
     if customer.alegra_id and customer.alegra_synced and not force:
+        # Re-push name/address so weak lead-id names get fixed on click.
+        alegra_client.update_contact(customer)
         return customer
     if customer.alegra_id and not force:
+        alegra_client.update_contact(customer)
         customer.alegra_synced = True
         customer.save(update_fields=["alegra_synced", "updated_at"])
         return customer

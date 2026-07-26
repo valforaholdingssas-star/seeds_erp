@@ -163,3 +163,31 @@ def test_build_contact_payload_includes_department(db):
     assert payload["address"]["city"] == "Bogotá, D.C."
     assert payload["address"]["country"] == "Colombia"
     assert "name" not in payload
+
+
+@pytest.mark.django_db
+def test_resolve_weak_kommo_name_from_email(db):
+    from apps.accounting.models import Customer
+    from apps.accounting.services.alegra import build_contact_payload
+    from apps.geo.models import GeoCatalog
+
+    GeoCatalog.objects.get_or_create(
+        municipality_code="11001000",
+        defaults={
+            "municipality": "Bogotá",
+            "department": "Bogotá D.C.",
+            "department_iso": "DC",
+            "search": "bogota",
+        },
+    )
+    customer = Customer.objects.create(
+        name="13085108",
+        id_type="CC",
+        id_number="35220189",
+        city="La calera",
+        email="ebescobars@gmail.com",
+    )
+    payload = build_contact_payload(customer)
+    assert payload["nameObject"]["firstName"] == "Ebescobars"
+    assert payload["nameObject"]["lastName"] == "-"
+    assert payload["nameObject"]["firstName"] != "13085108"

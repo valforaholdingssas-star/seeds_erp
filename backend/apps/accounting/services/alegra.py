@@ -57,7 +57,8 @@ def _split_person_name(full: str) -> dict[str, str]:
     if not parts:
         return {"firstName": "Cliente", "lastName": "Seeds"}
     if len(parts) == 1:
-        return {"firstName": parts[0], "lastName": parts[0]}
+        # Alegra concatena firstName+lastName; no duplicar el mismo token.
+        return {"firstName": parts[0], "lastName": "-"}
     if len(parts) == 2:
         return {"firstName": parts[0], "lastName": parts[1]}
     if len(parts) == 3:
@@ -71,6 +72,44 @@ def _split_person_name(full: str) -> dict[str, str]:
         "secondName": parts[1],
         "lastName": " ".join(parts[2:]),
     }
+
+
+def _is_weak_person_name(value: str, *, id_number: str = "") -> bool:
+    """True when the 'name' is really an order/lead id or empty."""
+    name = (value or "").strip()
+    if not name:
+        return True
+    digits = _digits_only(name)
+    if digits and digits == _digits_only(name.replace(" ", "")) and name.replace(" ", "").isdigit():
+        return True
+    if id_number and _digits_only(name) == _digits_only(id_number) and len(_digits_only(name)) >= 5:
+        return True
+    # Single long numeric token (Kommo often uses lead id as name).
+    if re.fullmatch(r"\d{5,}", name):
+        return True
+    return False
+
+
+def _name_from_email(email: str) -> str:
+    local = (email or "").strip().split("@", 1)[0]
+    local = re.sub(r"[._+\-]+", " ", local).strip()
+    if not local or local.isdigit():
+        return ""
+    return " ".join(p.capitalize() for p in local.split() if p)
+
+
+def resolve_customer_display_name(customer) -> str:
+    """Prefer a human name; never send bare order/lead ids to Alegra."""
+    id_number = _digits_only(getattr(customer, "id_number", "") or "")
+    raw = (getattr(customer, "name", None) or "").strip()
+    if not _is_weak_person_name(raw, id_number=id_number):
+        return raw
+    from_email = _name_from_email(getattr(customer, "email", "") or "")
+    if from_email:
+        return from_email
+    if id_number:
+        return f"Cliente {id_number[-4:]}"
+    return "Cliente Seeds"
 
 
 def _drop_empty(value: Any) -> Any:
@@ -142,7 +181,7 @@ def build_contact_payload(customer) -> dict[str, Any]:
     is_company = id_type in {"NIT", "FOREIGN_NIT"}
     kind = "LEGAL_ENTITY" if is_company else "PERSON_ENTITY"
     regime = "COMMON_REGIME" if is_company else "SIMPLIFIED_REGIME"
-    full_name = (customer.name or id_number or "Cliente").strip()
+    full_name = resolve_customer_display_name(customer)
 
     identification: dict[str, Any] = {"type": id_type, "number": id_number}
     if id_type == "NIT":
@@ -218,7 +257,11 @@ def _log(
 
 
 def create_or_find_contact(customer) -> dict[str, Any]:
-    """POST /contacts or mock. Returns {id: alegra_id, ...}."""
+    """POST /contacts or mock. Returns {id: alegra_id, ...}.
+
+    If the contact already exists, PUTs name/address so weak Kommo lead-ids
+    (e.g. \"13085108 13085108\") get corrected on re-sync.
+    """
     auth = _auth()
     payload = build_contact_payload(customer)
     id_number = payload["identificationObject"]["number"]
@@ -227,7 +270,7 @@ def create_or_find_contact(customer) -> dict[str, Any]:
 
     if not auth:
         mock_id = f"mock-contact-{id_number or customer.id}"
-        body = {"id": mock_id, "name": customer.name, "_mock": True}
+        body = {"id": mock_id, "name": resolve_customer_display_name(customer), "_mock": True}
         _log(
             method="POST",
             url=url,
@@ -244,24 +287,23 @@ def create_or_find_contact(customer) -> dict[str, Any]:
     limiter = TokenBucketRateLimiter("alegra", rate_per_second=0.8, capacity=1)
     limiter.acquire(timeout=60)
     with httpx.Client(timeout=45.0, auth=auth) as client:
-        # search first by numeric identification
-        search = client.get(url, params={"identification": id_number})
-        if search.is_success:
-            data = search.json()
-            if isinstance(data, list) and data:
-                found = data[0] if isinstance(data[0], dict) else {"id": data[0]}
-                _log(
-                    method="GET",
-                    url=url,
-                    request_body={"identification": id_number},
-                    response_status=search.status_code,
-                    response_body=found if isinstance(found, dict) else {"raw": str(found)},
-                    success=True,
-                    latency_ms=int((time.monotonic() - started) * 1000),
-                    ref_type="Customer",
-                    ref_id=str(customer.id),
-                )
-                return found
+        contact_id = (getattr(customer, "alegra_id", None) or "").strip()
+        if not contact_id:
+            search = client.get(url, params={"identification": id_number})
+            if search.is_success:
+                data = search.json()
+                if isinstance(data, list) and data and isinstance(data[0], dict):
+                    contact_id = str(data[0].get("id") or "").strip()
+
+        if contact_id:
+            return _put_contact(
+                client,
+                contact_id=contact_id,
+                payload=payload,
+                customer=customer,
+                started=started,
+            )
+
         resp = client.post(url, json=payload)
     latency = int((time.monotonic() - started) * 1000)
     try:
@@ -284,6 +326,92 @@ def create_or_find_contact(customer) -> dict[str, Any]:
         msg = body if isinstance(body, dict) else {"raw": str(body)}
         raise RuntimeError(f"Alegra contact {resp.status_code}: {msg}")
     return body if isinstance(body, dict) else {"id": str(body)}
+
+
+def _put_contact(
+    client: httpx.Client,
+    *,
+    contact_id: str,
+    payload: dict[str, Any],
+    customer,
+    started: float,
+) -> dict[str, Any]:
+    url = f"{_alegra_base_url()}/contacts/{contact_id}"
+    # Keep identity stable; refresh name / address / contact channels.
+    update_body = {
+        k: payload[k]
+        for k in (
+            "name",
+            "nameObject",
+            "kindOfPerson",
+            "regime",
+            "email",
+            "phonePrimary",
+            "mobile",
+            "address",
+            "type",
+            "status",
+        )
+        if k in payload
+    }
+    resp = client.put(url, json=update_body)
+    latency = int((time.monotonic() - started) * 1000)
+    try:
+        body = resp.json()
+    except Exception:
+        body = {"raw": resp.text[:2000]}
+    if not isinstance(body, dict):
+        body = {"raw": str(body)}
+    body.setdefault("id", contact_id)
+    _log(
+        method="PUT",
+        url=url,
+        request_body=update_body,
+        response_status=resp.status_code,
+        response_body=body,
+        success=resp.is_success,
+        error="" if resp.is_success else str(body)[:1000],
+        latency_ms=latency,
+        ref_type="Customer",
+        ref_id=str(customer.id),
+    )
+    if not resp.is_success:
+        raise RuntimeError(f"Alegra contact update {resp.status_code}: {body}")
+    return body
+
+
+def update_contact(customer) -> dict[str, Any]:
+    """PUT /contacts/{alegra_id} using the current ERP customer data."""
+    auth = _auth()
+    contact_id = (getattr(customer, "alegra_id", None) or "").strip()
+    if not contact_id:
+        raise RuntimeError("Cliente sin alegra_id para actualizar.")
+    payload = build_contact_payload(customer)
+    started = time.monotonic()
+    if not auth:
+        body = {"id": contact_id, "name": resolve_customer_display_name(customer), "_mock": True}
+        _log(
+            method="PUT",
+            url=f"{_alegra_base_url()}/contacts/{contact_id}",
+            request_body=payload,
+            response_status=200,
+            response_body=body,
+            success=True,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            ref_type="Customer",
+            ref_id=str(customer.id),
+        )
+        return body
+    limiter = TokenBucketRateLimiter("alegra", rate_per_second=0.8, capacity=1)
+    limiter.acquire(timeout=60)
+    with httpx.Client(timeout=45.0, auth=auth) as client:
+        return _put_contact(
+            client,
+            contact_id=contact_id,
+            payload=payload,
+            customer=customer,
+            started=started,
+        )
 
 
 def create_invoice(invoice, *, customer_alegra_id: str) -> dict[str, Any]:
