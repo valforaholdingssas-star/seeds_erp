@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+from decimal import Decimal
 from typing import Any
 
 import httpx
@@ -571,6 +572,29 @@ def resolve_invoice_item_id(client: httpx.Client | None = None) -> str:
     )
 
 
+def resolve_iva_exempt_tax_id(client: httpx.Client | None = None) -> str:
+    """Tax id for 0% / exento lines (shipping). Seeds account: id 1 = IVA Exento."""
+    configured = str(cfg.get("alegra.iva_exempt_tax_id", "") or "").strip()
+    if configured:
+        return configured
+    if client is None:
+        return "1"
+    taxes = _alegra_get_json(client, "/taxes")
+    if not isinstance(taxes, list):
+        return "1"
+    for tax in taxes:
+        name = str(tax.get("name") or "").lower()
+        pct = str(tax.get("percentage") or "0")
+        status = str(tax.get("status") or "")
+        if status and status != "active":
+            continue
+        if pct not in {"0", "0.0", "0.00"}:
+            continue
+        if "exent" in name or "exclu" in name or tax.get("type") == "IVA":
+            return str(tax.get("id"))
+    return "1"
+
+
 def build_invoice_payload(
     invoice,
     *,
@@ -583,24 +607,70 @@ def build_invoice_payload(
     - tax id 1 = IVA Exento (0%). Sales IVA 19% is id 3.
     - item id is mandatory (code 3065); free-text-only items are rejected.
     - use electronic numberTemplate (SDS / id 15).
-    - price must be sin IVA; Alegra adds tax.
+    - Alegra ``price`` is sin IVA and Alegra adds tax on top.
+
+    Fiscal model in Seeds: customer total already includes IVA on products.
+    We therefore send:
+      1) products ex-IVA = amount_products / 1.19  → tax 19%
+      2) shipping (total − products)               → tax exento
+    so Alegra's grand total matches ``sale.total_value``.
     """
+    from decimal import ROUND_HALF_UP
+
+    from apps.sales.services.normalization import get_iva_rate
+
     sale = invoice.sale
     inv_date = (sale.closed_at or invoice.created_at).date().isoformat()
-    net = sale.net_value if sale.net_value is not None else sale.total_value
-    try:
-        price = float(net or 0)
-    except (TypeError, ValueError):
-        price = 0.0
-    if price <= 0:
+
+    total = Decimal(str(sale.total_value or 0))
+    products = Decimal(str(sale.amount_products or 0))
+    if products <= 0:
+        # Legacy rows without amount_products: treat whole total as taxable.
+        products = total
+    if products > total:
+        products = total
+    shipping = total - products
+    if shipping < 0:
+        shipping = Decimal("0")
+
+    rate = get_iva_rate()
+    divisor = Decimal("1") + (rate / Decimal("100"))
+    price_ex_iva = (products / divisor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if price_ex_iva <= 0 and shipping <= 0:
         raise RuntimeError(
-            f"Valor neto inválido para facturar (net_value={sale.net_value}, "
+            f"Valor inválido para facturar (products={sale.amount_products}, "
             f"total={sale.total_value})."
         )
 
     tax_id = resolve_iva_tax_id(client)
+    exempt_tax_id = resolve_iva_exempt_tax_id(client)
     template_id = resolve_invoice_number_template_id(client)
     item_id = resolve_invoice_item_id(client)
+    item_ref: Any = int(item_id) if str(item_id).isdigit() else item_id
+    tax_ref: Any = int(tax_id) if str(tax_id).isdigit() else tax_id
+    exempt_ref: Any = int(exempt_tax_id) if str(exempt_tax_id).isdigit() else exempt_tax_id
+
+    items: list[dict[str, Any]] = []
+    if price_ex_iva > 0:
+        items.append(
+            {
+                "id": item_ref,
+                "price": float(price_ex_iva),
+                "quantity": 1,
+                "tax": [{"id": tax_ref}],
+                "description": f"Seeds · pedido {sale.external_id}",
+            }
+        )
+    if shipping > 0:
+        items.append(
+            {
+                "id": item_ref,
+                "price": float(shipping.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
+                "quantity": 1,
+                "tax": [{"id": exempt_ref}],
+                "description": f"Envío · pedido {sale.external_id}",
+            }
+        )
 
     payload: dict[str, Any] = {
         "date": inv_date,
@@ -609,15 +679,7 @@ def build_invoice_payload(
         "numberTemplate": {"id": str(template_id)},
         "paymentForm": "CASH",
         "paymentMethod": "INSTRUMENT_NOT_DEFINED",
-        "items": [
-            {
-                "id": int(item_id) if str(item_id).isdigit() else item_id,
-                "price": price,
-                "quantity": 1,
-                "tax": [{"id": int(tax_id) if str(tax_id).isdigit() else tax_id}],
-                "description": f"Seeds · pedido {sale.external_id}",
-            }
-        ],
+        "items": items,
         "anotation": f"Seeds ERP {invoice.idempotency_key}",
         "status": "open",
     }

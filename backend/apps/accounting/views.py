@@ -21,6 +21,7 @@ from apps.accounting.services.invoicing import (
     issue_invoice,
     normalize_customer_documents,
     reconcile_invoice,
+    reopen_invoice_after_void,
     sync_customer_to_alegra,
 )
 from apps.accounting.services.iva import build_iva_dashboard
@@ -147,6 +148,14 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"])
     def reconcile(self, request, pk=None):
         invoice = reconcile_invoice(self.get_object().id, actor=request.user)
+        return Response(InvoiceSerializer(invoice).data)
+
+    @action(detail=True, methods=["post"], url_path="reopen-after-void")
+    def reopen_after_void(self, request, pk=None):
+        try:
+            invoice = reopen_invoice_after_void(self.get_object().id, actor=request.user)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
         return Response(InvoiceSerializer(invoice).data)
 
     @action(detail=False, methods=["post"], url_path="bulk-issue")

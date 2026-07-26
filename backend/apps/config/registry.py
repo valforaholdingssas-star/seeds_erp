@@ -200,6 +200,14 @@ SETTINGS: list[Setting] = [
         help="Vacío = autodetectar impuesto IVA 19% activo. No usar id 1 (Exento).",
     ),
     Setting(
+        key="alegra.iva_exempt_tax_id",
+        label="ID impuesto IVA exento (0%)",
+        group="ALEGRA",
+        type=SettingType.STRING,
+        default="1",
+        help="Para líneas de envío sin IVA. En Seeds suele ser id 1 (IVA Exento).",
+    ),
+    Setting(
         key="alegra.number_template_id",
         label="ID numeración electrónica",
         group="ALEGRA",

@@ -166,6 +166,21 @@ export function InvoicesPage() {
     onError: (e) => setErr(errDetail(e)),
   });
 
+  const reopen = useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await apiClient.post<Invoice>(
+        `/accounting/invoices/${id}/reopen-after-void/`,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      setErr(null);
+      setMsg("Factura reabierta · lista para emitir de nuevo.");
+      void qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
+    onError: (e) => setErr(errDetail(e)),
+  });
+
   const selectableReady = selected.filter((s) => s.can_issue);
 
   const columns = useMemo<ColumnDef<Invoice, unknown>[]>(
@@ -256,20 +271,42 @@ export function InvoicesPage() {
               </Button>
             ) : null}
             {row.original.status === "GENERADA" ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => refund.mutate(row.original.id)}
-              >
-                Reembolsar
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => refund.mutate(row.original.id)}
+                >
+                  Reembolsar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  title="Úsalo solo después de anular la FE en Alegra"
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        "¿Ya anulaste esta factura en Alegra?\nSe reabrirá en Seeds para volver a emitir con el payload corregido.",
+                      )
+                    ) {
+                      return;
+                    }
+                    setErr(null);
+                    setMsg(null);
+                    reopen.mutate(row.original.id);
+                  }}
+                >
+                  Reabrir
+                </Button>
+              </>
             ) : null}
           </div>
         ),
       },
     ],
-    [issue, reconcile, refund],
+    [issue, reconcile, refund, reopen],
   );
 
   const kanbanItems = useMemo<KanbanItem[]>(

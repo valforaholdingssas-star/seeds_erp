@@ -170,13 +170,39 @@ def test_build_invoice_payload_uses_iva19_and_item_id(db, sale):
     from apps.accounting.services.alegra import build_invoice_payload
     from apps.accounting.services.invoicing import ensure_invoice_for_sale
 
+    sale.amount_products = "119000"
+    sale.amount_shipping = "0"
+    sale.save(update_fields=["amount_products", "amount_shipping"])
     invoice = ensure_invoice_for_sale(sale)
     payload = build_invoice_payload(invoice, customer_alegra_id="879")
     assert payload["client"] == {"id": "879"}
     assert payload["numberTemplate"]["id"] == "15"
+    assert len(payload["items"]) == 1
     item = payload["items"][0]
     assert item["id"] == 1
     assert item["tax"] == [{"id": 3}]
-    assert item["price"] > 0
-    assert "name" not in item or item.get("id")
+    # price is sin IVA: 119000 / 1.19 = 100000
+    assert item["price"] == 100000.0
     assert payload["paymentForm"] == "CASH"
+
+
+@pytest.mark.django_db
+def test_build_invoice_payload_splits_shipping_exempt(db, sale):
+    from apps.accounting.services.alegra import build_invoice_payload
+    from apps.accounting.services.invoicing import ensure_invoice_for_sale
+
+    sale.total_value = "64500"
+    sale.amount_products = "55500"
+    sale.amount_shipping = "9000"
+    sale.iva_generated = "8861.34"
+    sale.net_value = "55638.66"
+    sale.save()
+    invoice = ensure_invoice_for_sale(sale)
+    payload = build_invoice_payload(invoice, customer_alegra_id="879")
+    assert len(payload["items"]) == 2
+    products, shipping = payload["items"]
+    assert products["tax"] == [{"id": 3}]
+    assert products["price"] == 46638.66  # 55500 / 1.19
+    assert shipping["tax"] == [{"id": 1}]
+    assert shipping["price"] == 9000.0
+    assert "Envío" in shipping["description"]

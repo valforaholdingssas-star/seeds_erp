@@ -494,6 +494,51 @@ def create_refund(invoice_id, *, reason: str, actor=None) -> Refund:
 
 
 @transaction.atomic
+def reopen_invoice_after_void(invoice_id, *, actor=None) -> Invoice:
+    """Clear Alegra link so a voided FE can be re-issued from Seeds.
+
+    Operator must void/anular the document in Alegra first.
+    """
+    invoice = Invoice.objects.select_for_update(of=("self",)).get(id=invoice_id)
+    if invoice.status not in {InvoiceStatus.GENERADA, InvoiceStatus.ANULADA, InvoiceStatus.FALLIDA}:
+        raise ValueError("Solo se reabre una factura GENERADA, ANULADA o FALLIDA.")
+    previous = {
+        "status": invoice.status,
+        "number": invoice.number,
+        "alegra_id": invoice.alegra_id,
+    }
+    invoice.status = InvoiceStatus.POR_GENERAR
+    invoice.alegra_id = ""
+    invoice.number = ""
+    invoice.cufe = ""
+    invoice.pdf_url = ""
+    invoice.sent_at = None
+    invoice.confirmed_at = None
+    invoice.last_error = ""
+    invoice.save(
+        update_fields=[
+            "status",
+            "alegra_id",
+            "number",
+            "cufe",
+            "pdf_url",
+            "sent_at",
+            "confirmed_at",
+            "last_error",
+            "updated_at",
+        ]
+    )
+    log_audit_event(
+        actor=actor,
+        action="INVOICE_REOPENED_AFTER_VOID",
+        entity="Invoice",
+        entity_id=str(invoice.id),
+        metadata=previous,
+    )
+    return invoice
+
+
+@transaction.atomic
 def confirm_void(refund_id, *, actor=None) -> Refund:
     refund = Refund.objects.select_for_update().get(id=refund_id)
     refund.manual_void_pending = False

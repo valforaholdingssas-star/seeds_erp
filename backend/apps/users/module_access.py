@@ -360,6 +360,7 @@ ACTION_TO_CRUD: dict[str, Crud] = {
     "issue": "u",
     "reconcile": "u",
     "bulk_issue": "u",
+    "reopen_after_void": "u",
     "confirm_void": "d",
     "sync_alegra": "u",
     "bulk_sync_alegra": "u",
