@@ -197,17 +197,21 @@ export function CustomersPage() {
   }
 
   const healNames = useMutation({
-    mutationFn: async (ids: string[] | null) => {
+    mutationFn: async (payload: {
+      ids: string[] | null;
+      unsynced_only?: boolean;
+    }) => {
       const { data } = await apiClient.post<{
         updated: number;
         skipped: number;
         failed: number;
         processed: number;
         errors: { id: string; name?: string; detail: string }[];
-      }>(
-        "/accounting/customers/bulk-heal-names/",
-        ids?.length ? { ids, limit: 200 } : { limit: 80 },
-      );
+      }>("/accounting/customers/bulk-heal-names/", {
+        ...(payload.ids?.length ? { ids: payload.ids } : {}),
+        limit: 200,
+        unsynced_only: Boolean(payload.unsynced_only),
+      });
       return data;
     },
     onSuccess: (data) => {
@@ -229,11 +233,13 @@ export function CustomersPage() {
     },
   });
 
-  function runHealNames(ids: string[] | null) {
+  function runHealNames(ids: string[] | null, unsyncedOnly = false) {
     const scope =
       ids && ids.length > 0
         ? `los ${ids.length} seleccionado(s)`
-        : "hasta 80 clientes con nombre débil (ID de lead)";
+        : unsyncedOnly
+          ? "contactos pendientes (aún no sincronizados)"
+          : "clientes con nombre débil (ID de lead)";
     if (
       !window.confirm(
         `¿Actualizar nombres desde Kommo (${scope})?\nSe usa el nombre del contacto en Kommo.`,
@@ -243,7 +249,7 @@ export function CustomersPage() {
     }
     setErr(null);
     setMsg(null);
-    healNames.mutate(ids);
+    healNames.mutate({ ids, unsynced_only: unsyncedOnly });
   }
 
   const columns = useMemo<ColumnDef<Customer, unknown>[]>(
@@ -324,6 +330,7 @@ export function CustomersPage() {
               onClick={() =>
                 runHealNames(
                   selected.length > 0 ? selected.map((s) => s.id) : null,
+                  selected.length === 0 && filter === "pending",
                 )
               }
             >
@@ -331,7 +338,9 @@ export function CustomersPage() {
                 ? "Actualizando nombres…"
                 : selected.length > 0
                   ? `Nombres Kommo (${selected.length})`
-                  : "Actualizar nombres"}
+                  : filter === "pending"
+                    ? "Nombres pendientes"
+                    : "Actualizar nombres"}
             </Button>
             <Button
               type="button"
@@ -384,6 +393,13 @@ export function CustomersPage() {
           </Button>
         ))}
       </div>
+
+      {filter === "pending" ? (
+        <p className="text-sm text-text-muted">
+          Si ves un ID de lead en lugar del nombre, usa «Nombres pendientes» para
+          traer el nombre real desde Kommo (igual que en sincronizados).
+        </p>
+      ) : null}
 
       <PaginationBar
         page={page}

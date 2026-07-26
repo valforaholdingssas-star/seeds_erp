@@ -7,6 +7,7 @@ from apps.logistics.views import (
     DispatchListView,
     DispatchMarkSentView,
     DispatchPackSummaryView,
+    EnviaPaymentsView,
     ShipmentViewSet,
 )
 
@@ -30,6 +31,11 @@ urlpatterns = [
         "logistics/dispatch/labels-pdf/",
         DispatchLabelsPdfView.as_view(),
         name="dispatch-labels-pdf",
+    ),
+    path(
+        "logistics/envia-payments/",
+        EnviaPaymentsView.as_view(),
+        name="envia-payments",
     ),
     path("", include(router.urls)),
 ]

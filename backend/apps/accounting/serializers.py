@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.accounting.models import Customer, Invoice, Refund
+from apps.accounting.models import Customer, Invoice, InvoiceStatus, Refund
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -27,6 +27,11 @@ class InvoiceSerializer(serializers.ModelSerializer):
     sale_external_id = serializers.CharField(source="sale.external_id", read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
     customer_id_number = serializers.CharField(source="customer.id_number", read_only=True)
+    customer_alegra_synced = serializers.BooleanField(
+        source="customer.alegra_synced", read_only=True
+    )
+    customer_alegra_id = serializers.CharField(source="customer.alegra_id", read_only=True)
+    can_issue = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
@@ -37,6 +42,9 @@ class InvoiceSerializer(serializers.ModelSerializer):
             "customer",
             "customer_name",
             "customer_id_number",
+            "customer_alegra_synced",
+            "customer_alegra_id",
+            "can_issue",
             "status",
             "alegra_id",
             "number",
@@ -52,6 +60,12 @@ class InvoiceSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_can_issue(self, obj) -> bool:
+        if obj.status not in {InvoiceStatus.POR_GENERAR, InvoiceStatus.FALLIDA}:
+            return False
+        customer = obj.customer
+        return bool(customer and customer.alegra_id and customer.alegra_synced)
 
 
 class RefundSerializer(serializers.ModelSerializer):

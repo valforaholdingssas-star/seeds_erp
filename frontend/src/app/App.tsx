@@ -24,6 +24,7 @@ import { SalesPage } from "@/features/sales/SalesPage";
 import { SaleDetailPage } from "@/features/sales/SaleDetailPage";
 import { PaymentMethodsPage } from "@/features/sales/PaymentMethodsPage";
 import { InternalSaleFormPage } from "@/features/sales/InternalSaleFormPage";
+import { EnviaPaymentsPage } from "@/features/logistics/EnviaPaymentsPage";
 import { ShipmentsPage } from "@/features/logistics/ShipmentsPage";
 import { DispatchPage } from "@/features/logistics/DispatchPage";
 import { ProductsPage } from "@/features/inventory/ProductsPage";
@@ -84,6 +85,7 @@ export function App() {
               </Route>
               <Route element={<RequireLogisticsAccess />}>
                 <Route path="logistics" element={<ShipmentsPage />} />
+                <Route path="logistics/envia-payments" element={<EnviaPaymentsPage />} />
                 <Route path="dispatch" element={<DispatchPage />} />
               </Route>
               <Route element={<RequireInventoryAccess />}>

@@ -17,6 +17,7 @@ def ensure_customer_from_sale(sale, *, actor=None) -> Customer:
         _name_from_email,
         resolve_customer_display_name,
     )
+    from apps.sales.models import SaleSource
 
     id_number = (sale.id_number or "").strip() or f"SIN-DOC-{sale.external_id}"
     # Normalize document early so get_or_create matches formatted CC/NIT.
@@ -28,7 +29,23 @@ def ensure_customer_from_sale(sale, *, actor=None) -> Customer:
 
     raw_name = (sale.customer_name or "").strip()
     if _is_weak_person_name(raw_name, id_number=id_number):
-        raw_name = _name_from_email(sale.email or "") or raw_name
+        # Prefer live Kommo contact.name even before Alegra sync.
+        if getattr(sale, "source", None) == SaleSource.KOMMO:
+            try:
+                from apps.sales.services.kommo import fetch_contact_name_for_lead
+
+                kommo_name = fetch_contact_name_for_lead(str(sale.external_id))
+                if kommo_name and not _is_weak_person_name(
+                    kommo_name, id_number=id_number, lead_id=str(sale.external_id)
+                ):
+                    raw_name = kommo_name
+                    if (sale.customer_name or "").strip() != kommo_name:
+                        sale.customer_name = kommo_name
+                        sale.save(update_fields=["customer_name", "updated_at"])
+            except Exception:
+                pass
+        if _is_weak_person_name(raw_name, id_number=id_number):
+            raw_name = _name_from_email(sale.email or "") or raw_name
 
     customer, created = Customer.objects.get_or_create(
         id_type="CC",
@@ -63,17 +80,19 @@ def ensure_customer_from_sale(sale, *, actor=None) -> Customer:
                     continue
                 setattr(customer, field, value)
                 changed = True
-        healed = resolve_customer_display_name(customer)
-        if healed != (customer.name or "").strip():
-            customer.name = healed
-            changed = True
+        if _is_weak_person_name(customer.name, id_number=customer.id_number):
+            healed = resolve_customer_display_name(customer, refresh_kommo=True)
+            if healed != (customer.name or "").strip():
+                customer.name = healed
+                changed = True
         if changed:
             customer.save()
     else:
-        healed = resolve_customer_display_name(customer)
-        if healed != (customer.name or "").strip():
-            customer.name = healed
-            customer.save(update_fields=["name", "updated_at"])
+        if _is_weak_person_name(customer.name, id_number=customer.id_number):
+            healed = resolve_customer_display_name(customer, refresh_kommo=True)
+            if healed != (customer.name or "").strip():
+                customer.name = healed
+                customer.save(update_fields=["name", "updated_at"])
     return customer
 
 
@@ -238,24 +257,32 @@ def normalize_customer_documents(ids: list | None = None, *, actor=None) -> dict
     }
 
 
-def bulk_heal_customer_names(ids: list | None = None, *, actor=None, limit: int = 80) -> dict:
+def bulk_heal_customer_names(
+    ids: list | None = None,
+    *,
+    actor=None,
+    limit: int = 80,
+    unsynced_only: bool = False,
+) -> dict:
     """Refresh Customer.name from Kommo contact.name for weak/lead-id names."""
     from apps.accounting.services.alegra import (
         _is_weak_person_name,
         resolve_customer_display_name,
     )
 
-    qs = Customer.objects.all().order_by("created_at")
+    qs = Customer.objects.all().order_by("alegra_synced", "created_at")
     if ids:
         qs = qs.filter(id__in=ids)
     else:
-        # Heuristic: numeric-looking names or short placeholders.
         qs = qs.filter(
             models.Q(name__regex=r"^\d{5,}$")
             | models.Q(name__istartswith="Lead #")
             | models.Q(name__istartswith="Cliente ")
             | models.Q(name="")
+            | models.Q(name__regex=r"^[A-Za-z0-9._%+-]+$")  # email-local placeholders
         )
+    if unsynced_only:
+        qs = qs.filter(alegra_synced=False)
 
     updated = 0
     skipped = 0
@@ -318,12 +345,13 @@ def issue_invoice(invoice_id, *, actor=None) -> Invoice:
             "Hay un envío en curso. Usa reconciliar antes de reintentar."
         )
 
-    customer = sync_customer_to_alegra(invoice.customer, actor=actor)
-    if not customer.alegra_id:
-        invoice.status = InvoiceStatus.FALLIDA
-        invoice.last_error = "Cliente sin alegra_id tras sync."
-        invoice.save(update_fields=["status", "last_error", "updated_at"])
-        return invoice
+    customer = invoice.customer
+    # Do NOT auto-create the Alegra contact here: contact must already be synced.
+    if not (customer.alegra_id and customer.alegra_synced):
+        raise ValueError(
+            "El contacto debe estar sincronizado con Alegra antes de emitir. "
+            "Ve a Contabilidad → Clientes, sincroniza el cliente y luego emite."
+        )
 
     invoice.status = InvoiceStatus.ENVIANDO
     invoice.sent_at = timezone.now()

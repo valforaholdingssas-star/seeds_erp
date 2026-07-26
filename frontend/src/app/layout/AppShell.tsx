@@ -141,6 +141,14 @@ const navGroups: NavGroup[] = [
         keywords: ["guias", "envia", "direccion"],
       },
       {
+        to: "/logistics/envia-payments",
+        label: "Pagos Envia",
+        icon: Receipt,
+        roles: ["ADMIN", "LOGISTICA", "CONTABILIDAD", "SUPERVISOR", "VIEWER"],
+        module: "logistics",
+        keywords: ["envia", "guias", "costo", "terceros", "pagos"],
+      },
+      {
         to: "/dispatch",
         label: "Despachos",
         icon: Package,

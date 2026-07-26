@@ -1,3 +1,5 @@
+from django.db.models import Count, Sum
+from django.utils.dateparse import parse_date
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -39,6 +41,75 @@ def _client_ip(request) -> str | None:
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.META.get("REMOTE_ADDR")
+
+
+class EnviaPaymentsView(APIView):
+    """Record of payments/costs charged by Envia (third-party shipping spend).
+
+    Not yet pushed to Alegra — accounting visibility only.
+    """
+
+    permission_module = "logistics"
+    module_roles = ["LOGISTICA", "CONTABILIDAD", "SUPERVISOR", "VIEWER", "ADMIN", "VENTAS"]
+    permission_classes = [IsModuleRole]
+
+    def get(self, request):
+        qs = (
+            Shipment.objects.select_related("sale")
+            .filter(shipping_cost__isnull=False)
+            .exclude(shipping_cost=0)
+            .order_by("-sent_at", "-created_at")
+        )
+        date_from = parse_date(request.query_params.get("from") or "")
+        date_to = parse_date(request.query_params.get("to") or "")
+        status_filter = (request.query_params.get("status") or "").strip()
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        agg = qs.aggregate(
+            total_paid=Sum("shipping_cost"),
+            count=Count("id"),
+        )
+        page_size = min(int(request.query_params.get("page_size") or 100), 500)
+        page = max(int(request.query_params.get("page") or 1), 1)
+        start = (page - 1) * page_size
+        end = start + page_size
+        rows = []
+        for s in qs[start:end]:
+            rows.append(
+                {
+                    "id": str(s.id),
+                    "sale_id": str(s.sale_id),
+                    "sale_external_id": s.sale.external_id,
+                    "customer_name": s.sale.customer_name,
+                    "status": s.status,
+                    "carrier": s.carrier,
+                    "service": s.service,
+                    "tracking_number": s.tracking_number,
+                    "shipping_cost": str(s.shipping_cost or 0),
+                    "envia_shipment_id": s.envia_shipment_id,
+                    "city": s.generated_city or s.city_mirror or s.sale.city_raw,
+                    "sent_at": s.sent_at.isoformat() if s.sent_at else None,
+                    "created_at": s.created_at.isoformat() if s.created_at else None,
+                }
+            )
+        return Response(
+            {
+                "count": agg["count"] or 0,
+                "total_paid": str(agg["total_paid"] or 0),
+                "page": page,
+                "page_size": page_size,
+                "results": rows,
+                "hint": (
+                    "Pagos/costos de guía Envia. Panel separado de gastos; "
+                    "aún no se envían a Alegra."
+                ),
+            }
+        )
 
 
 class ShipmentViewSet(viewsets.ModelViewSet):

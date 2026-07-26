@@ -79,9 +79,13 @@ class CustomerViewSet(viewsets.ModelViewSet):
         ser = OptionalIdsSerializer(data=request.data or {})
         ser.is_valid(raise_exception=True)
         ids = ser.validated_data.get("ids") or []
-        limit = int(request.data.get("limit") or 80)
+        limit = int(request.data.get("limit") or 120)
+        unsynced_only = bool(request.data.get("unsynced_only"))
         result = bulk_heal_customer_names(
-            ids or None, actor=request.user, limit=max(1, min(limit, 200))
+            ids or None,
+            actor=request.user,
+            limit=max(1, min(limit, 250)),
+            unsynced_only=unsynced_only,
         )
         status_code = 200 if result["failed"] == 0 else 207
         return Response(result, status=status_code)
@@ -120,9 +124,23 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
         ser.is_valid(raise_exception=True)
         ids = list(
             Invoice.objects.filter(
-                id__in=ser.validated_data["ids"], status=InvoiceStatus.POR_GENERAR
-            ).values_list("id", flat=True)
+                id__in=ser.validated_data["ids"],
+                status__in=[InvoiceStatus.POR_GENERAR, InvoiceStatus.FALLIDA],
+                customer__alegra_synced=True,
+            )
+            .exclude(customer__alegra_id="")
+            .values_list("id", flat=True)
         )
+        if not ids:
+            return Response(
+                {
+                    "detail": (
+                        "Ninguna factura seleccionada tiene el contacto ya "
+                        "sincronizado con Alegra."
+                    )
+                },
+                status=400,
+            )
         batch = BatchJob.objects.create(
             job_type=BatchJobType.ISSUE_INVOICES,
             status=BatchJobStatus.PENDING,

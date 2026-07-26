@@ -20,6 +20,9 @@ type Invoice = {
   sale_external_id: string;
   customer_name: string;
   customer_id_number: string;
+  customer_alegra_synced: boolean;
+  customer_alegra_id: string;
+  can_issue: boolean;
   status: string;
   number: string;
   total: string;
@@ -39,22 +42,35 @@ const statusVariant: Record<string, "sage" | "terracotta" | "wine" | "dark"> = {
   ANULADA: "wine",
 };
 
+function errDetail(err: unknown): string {
+  const ax = err as { response?: { data?: { detail?: string } }; message?: string };
+  return ax.response?.data?.detail || ax.message || "Error desconocido";
+}
+
 export function InvoicesPage() {
   const qc = useQueryClient();
   const openBatch = useBatchConsole((s) => s.openBatch);
   const [view, setView] = useState<"tabla" | "kanban">("tabla");
   const [selected, setSelected] = useState<Invoice[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [readyOnly, setReadyOnly] = useState(false);
 
   const invoices = useQuery({
     queryKey: ["invoices"],
     queryFn: async () => {
       const { data } = await apiClient.get<Paginated<Invoice> | Invoice[]>(
-        "/accounting/invoices/",
+        "/accounting/invoices/?page_size=200",
       );
-      return Array.isArray(data) ? data : data.results;
+      return Array.isArray(data) ? data : data.results || [];
     },
   });
+
+  const rows = useMemo(() => {
+    const all = invoices.data || [];
+    if (!readyOnly) return all;
+    return all.filter((inv) => inv.can_issue);
+  }, [invoices.data, readyOnly]);
 
   const issue = useMutation({
     mutationFn: async (id: string) => {
@@ -62,17 +78,25 @@ export function InvoicesPage() {
       return data;
     },
     onSuccess: (data) => {
+      setErr(null);
       setMsg(`Factura ${data.number || data.status}`);
-      qc.invalidateQueries({ queryKey: ["invoices"] });
+      void qc.invalidateQueries({ queryKey: ["invoices"] });
     },
-    onError: () => setMsg("No se pudo emitir. Si está ENVIANDO, reconcilia primero."),
+    onError: (e) => {
+      setMsg(null);
+      setErr(errDetail(e));
+    },
   });
 
   const reconcile = useMutation({
     mutationFn: async (id: string) => {
       await apiClient.post(`/accounting/invoices/${id}/reconcile/`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+    onSuccess: () => {
+      setErr(null);
+      void qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
+    onError: (e) => setErr(errDetail(e)),
   });
 
   const bulk = useMutation({
@@ -81,9 +105,14 @@ export function InvoicesPage() {
       return data;
     },
     onSuccess: async (data) => {
+      setErr(null);
       setMsg(`Emisión en lote iniciada · ${data.total} ítems`);
       void openBatch(data.id);
-      qc.invalidateQueries({ queryKey: ["invoices"] });
+      void qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
+    onError: (e) => {
+      setMsg(null);
+      setErr(errDetail(e));
     },
   });
 
@@ -95,11 +124,15 @@ export function InvoicesPage() {
       });
     },
     onSuccess: () => {
+      setErr(null);
       setMsg("Reembolso registrado.");
-      qc.invalidateQueries({ queryKey: ["invoices"] });
-      qc.invalidateQueries({ queryKey: ["sales"] });
+      void qc.invalidateQueries({ queryKey: ["invoices"] });
+      void qc.invalidateQueries({ queryKey: ["sales"] });
     },
+    onError: (e) => setErr(errDetail(e)),
   });
+
+  const selectableReady = selected.filter((s) => s.can_issue);
 
   const columns = useMemo<ColumnDef<Invoice, unknown>[]>(
     () => [
@@ -112,12 +145,27 @@ export function InvoicesPage() {
             checked={row.getIsSelected()}
             onChange={row.getToggleSelectedHandler()}
             className="h-4 w-4 accent-green-900"
-            disabled={row.original.status !== "POR_GENERAR"}
+            disabled={!row.original.can_issue}
+            title={
+              row.original.can_issue
+                ? "Seleccionar"
+                : "Requiere contacto sincronizado en Alegra"
+            }
           />
         ),
       },
       { accessorKey: "sale_external_id", header: "Pedido" },
       { accessorKey: "customer_name", header: "Cliente" },
+      {
+        id: "contacto",
+        header: "Contacto Alegra",
+        cell: ({ row }) =>
+          row.original.customer_alegra_synced && row.original.customer_alegra_id ? (
+            <Badge variant="sage">{row.original.customer_alegra_id}</Badge>
+          ) : (
+            <Badge variant="terracotta">Sin sync</Badge>
+          ),
+      },
       {
         accessorKey: "status",
         header: "Estado",
@@ -148,7 +196,17 @@ export function InvoicesPage() {
                 type="button"
                 size="sm"
                 variant="primary-wine"
-                onClick={() => issue.mutate(row.original.id)}
+                disabled={!row.original.can_issue || issue.isPending}
+                title={
+                  row.original.can_issue
+                    ? "Emitir en Alegra"
+                    : "Sincroniza el cliente en Contabilidad → Clientes primero"
+                }
+                onClick={() => {
+                  setErr(null);
+                  setMsg(null);
+                  issue.mutate(row.original.id);
+                }}
               >
                 Emitir
               </Button>
@@ -182,15 +240,17 @@ export function InvoicesPage() {
 
   const kanbanItems = useMemo<KanbanItem[]>(
     () =>
-      (invoices.data || []).map((inv) => ({
+      rows.map((inv) => ({
         id: inv.id,
         columnId: INV_STATUSES.includes(inv.status as (typeof INV_STATUSES)[number])
           ? inv.status
           : "POR_GENERAR",
         title: inv.customer_name || inv.sale_external_id,
-        subtitle: `${formatCOP(Number(inv.total || 0))} · ${inv.number || "sin número"}`,
+        subtitle: `${formatCOP(Number(inv.total || 0))} · ${
+          inv.can_issue ? "listo" : "sin contacto"
+        } · ${inv.number || "sin número"}`,
       })),
-    [invoices.data],
+    [rows],
   );
 
   return (
@@ -238,18 +298,43 @@ export function InvoicesPage() {
               type="button"
               size="xs"
               variant="primary-wine"
-              disabled={!selected.length || bulk.isPending || view !== "tabla"}
-              onClick={() => bulk.mutate(selected.map((s) => s.id))}
+              disabled={!selectableReady.length || bulk.isPending || view !== "tabla"}
+              onClick={() => bulk.mutate(selectableReady.map((s) => s.id))}
             >
-              Emitir lote
+              Emitir lote ({selectableReady.length})
             </Button>
           </>
         }
       />
 
-      {msg ? <Alert variant="info">{msg}</Alert> : null}
+      {msg ? <Alert variant="success">{msg}</Alert> : null}
+      {err ? <Alert variant="error">{err}</Alert> : null}
 
       <MockModeBanner providers={["alegra"]} />
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={!readyOnly ? "primary-dark" : "ghost"}
+          onClick={() => setReadyOnly(false)}
+        >
+          Todas
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={readyOnly ? "primary-dark" : "ghost"}
+          onClick={() => setReadyOnly(true)}
+        >
+          Listas para emitir
+        </Button>
+      </div>
+
+      <p className="text-sm text-text-muted">
+        Solo se puede emitir si el contacto ya está sincronizado en Alegra. Si aparece
+        «Sin sync», ve a Clientes y sincroniza primero.
+      </p>
 
       {view === "kanban" ? (
         <KanbanBoard
@@ -264,7 +349,7 @@ export function InvoicesPage() {
         />
       ) : (
         <DataTable
-          data={invoices.data || []}
+          data={rows}
           columns={columns}
           searchableKeys={["sale_external_id", "customer_name", "status", "number"]}
           columnFilters={[

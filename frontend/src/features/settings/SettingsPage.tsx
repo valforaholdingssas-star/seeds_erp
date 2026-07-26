@@ -125,8 +125,11 @@ export function SettingsPage() {
                     {result?.mode === "mock" ? (
                       <Badge variant="terracotta">MOCK</Badge>
                     ) : null}
-                    {result?.mode === "live" || (result?.ok && result?.mode !== "mock") ? (
+                    {result?.ok && result?.mode === "live" ? (
                       <Badge variant="sage">LIVE</Badge>
+                    ) : null}
+                    {result && !result.ok && result.mode !== "mock" ? (
+                      <Badge variant="wine">ERROR</Badge>
                     ) : null}
                   </div>
                   <p className="mt-1 text-sm text-text-muted">
