@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { MockModeBanner } from "@/components/ui/MockModeBanner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationBar } from "@/components/ui/PaginationBar";
+import { useBatchConsole } from "@/features/batch/batchStore";
 
 type Customer = {
   id: string;
@@ -24,17 +25,21 @@ type Customer = {
 
 type Paginated<T> = { count: number; results: T[] };
 
-type BulkResult = {
-  synced: number;
-  failed: number;
-  errors: { id: string; name?: string; detail: string }[];
-};
-
 type NormalizeResult = {
   updated: number;
   skipped: number;
   failed: number;
   errors: { id: string; name?: string; detail: string }[];
+};
+
+type BatchJob = {
+  id: string;
+  job_type: string;
+  status: string;
+  total: number;
+  done: number;
+  success: number;
+  failed: number;
 };
 
 function errDetail(err: unknown): string {
@@ -47,12 +52,13 @@ function errDetail(err: unknown): string {
 
 export function CustomersPage() {
   const qc = useQueryClient();
+  const openBatch = useBatchConsole((s) => s.openBatch);
   const [selected, setSelected] = useState<Customer[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "pending" | "synced">("all");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(25);
 
   useEffect(() => {
     setPage(1);
@@ -65,6 +71,7 @@ export function CustomersPage() {
       const q = new URLSearchParams({
         page: String(page),
         page_size: String(pageSize),
+        ordering: "name",
       });
       if (filter === "pending") q.set("alegra_synced", "false");
       if (filter === "synced") q.set("alegra_synced", "true");
@@ -88,20 +95,28 @@ export function CustomersPage() {
     },
   });
 
+  const syncedMeta = useQuery({
+    queryKey: ["customers", "synced-count"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<Paginated<Customer>>(
+        "/accounting/customers/?alegra_synced=true&page_size=1",
+      );
+      return data.count ?? 0;
+    },
+  });
+
   const syncOne = useMutation({
     mutationFn: async (id: string) => {
-      const { data } = await apiClient.post<Customer>(
-        `/accounting/customers/${id}/sync-alegra/`,
+      const { data } = await apiClient.post<BatchJob>(
+        "/accounting/customers/bulk-sync-alegra/",
+        { ids: [id] },
       );
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setErr(null);
-      setMsg(
-        data.alegra_synced
-          ? `Sincronizado: ${data.name} · Alegra ${data.alegra_id}`
-          : `Respuesta sin id Alegra para ${data.name}`,
-      );
+      setMsg(`Sincronización iniciada · ${data.total} cliente(s)`);
+      await openBatch(data.id);
       void qc.invalidateQueries({ queryKey: ["customers"] });
     },
     onError: (e) => {
@@ -112,30 +127,17 @@ export function CustomersPage() {
 
   const syncBulk = useMutation({
     mutationFn: async (ids: string[]) => {
-      const { data } = await apiClient.post<BulkResult>(
+      const { data } = await apiClient.post<BatchJob>(
         "/accounting/customers/bulk-sync-alegra/",
         { ids },
       );
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setSelected([]);
-      const failHint =
-        data.failed > 0
-          ? ` · Fallidos: ${data.errors
-              .slice(0, 3)
-              .map((e) => e.name || e.id)
-              .join(", ")}${data.errors.length > 3 ? "…" : ""}`
-          : "";
-      if (data.failed === 0) {
-        setErr(null);
-        setMsg(`Sincronizados ${data.synced} cliente(s) con Alegra.`);
-      } else {
-        setMsg(`Sincronizados ${data.synced}.`);
-        setErr(
-          `${data.failed} fallaron${failHint}. ${data.errors[0]?.detail || ""}`,
-        );
-      }
+      setErr(null);
+      setMsg(`Sincronización Alegra iniciada · ${data.total} cliente(s)`);
+      await openBatch(data.id);
       void qc.invalidateQueries({ queryKey: ["customers"] });
     },
     onError: (e) => {
@@ -293,7 +295,7 @@ export function CustomersPage() {
             type="button"
             size="sm"
             variant="outline"
-            disabled={syncOne.isPending}
+            disabled={syncOne.isPending || syncBulk.isPending}
             onClick={(e) => {
               e.stopPropagation();
               setErr(null);
@@ -308,12 +310,31 @@ export function CustomersPage() {
         ),
       },
     ],
-    [syncOne],
+    [syncOne, syncBulk.isPending],
   );
 
   const rows = customers.data?.results || [];
   const totalCount = customers.data?.count || 0;
   const pendingCount = pendingMeta.data ?? 0;
+  const syncedCount = syncedMeta.data ?? 0;
+
+  const pager = (
+    <PaginationBar
+      page={page}
+      pageSize={pageSize}
+      total={totalCount}
+      pageSizeOptions={[25, 50, 100, 200]}
+      onPageChange={(p) => {
+        setPage(p);
+        setSelected([]);
+      }}
+      onPageSizeChange={(size) => {
+        setPageSize(size);
+        setPage(1);
+        setSelected([]);
+      }}
+    />
+  );
 
   return (
     <div className="space-y-3">
@@ -379,7 +400,7 @@ export function CustomersPage() {
           [
             ["all", "Todos"],
             ["pending", `Pendientes${pendingCount ? ` (${pendingCount})` : ""}`],
-            ["synced", "Sincronizados"],
+            ["synced", `Sincronizados${syncedCount ? ` (${syncedCount})` : ""}`],
           ] as const
         ).map(([k, label]) => (
           <Button
@@ -401,20 +422,7 @@ export function CustomersPage() {
         </p>
       ) : null}
 
-      <PaginationBar
-        page={page}
-        pageSize={pageSize}
-        total={totalCount}
-        onPageChange={(p) => {
-          setPage(p);
-          setSelected([]);
-        }}
-        onPageSizeChange={(size) => {
-          setPageSize(size);
-          setPage(1);
-          setSelected([]);
-        }}
-      />
+      {pager}
 
       <DataTable
         data={rows}
@@ -448,14 +456,16 @@ export function CustomersPage() {
                 }}
               >
                 {syncBulk.isPending
-                  ? "Sincronizando…"
+                  ? "Iniciando…"
                   : `Sincronizar Alegra (${selected.length})`}
               </Button>
             </div>
           ) : null
         }
-        hint="Usa «Formatear documentos» para dejar solo números (CC/NIT). Luego sincroniza con Alegra."
+        hint="Al sincronizar se abre el panel de lote (como en envíos/facturas) con el estado de cada cliente. Usa el paginador para recorrer todas las páginas."
       />
+
+      {pager}
     </div>
   );
 }

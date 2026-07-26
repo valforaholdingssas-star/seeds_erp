@@ -16,7 +16,6 @@ from apps.accounting.serializers import (
 )
 from apps.accounting.services.invoicing import (
     bulk_heal_customer_names,
-    bulk_sync_customers_to_alegra,
     confirm_void,
     create_refund,
     issue_invoice,
@@ -25,7 +24,7 @@ from apps.accounting.services.invoicing import (
     sync_customer_to_alegra,
 )
 from apps.accounting.services.iva import build_iva_dashboard
-from apps.accounting.tasks import enqueue_issue_invoices
+from apps.accounting.tasks import enqueue_issue_invoices, enqueue_sync_customers
 from apps.logistics.models import BatchItemStatus, BatchJob, BatchJobStatus, BatchJobType, BatchJobItem
 from apps.logistics.serializers import BatchJobSerializer
 from apps.sales.models import ConsolidatedSale, SaleState
@@ -59,11 +58,32 @@ class CustomerViewSet(viewsets.ModelViewSet):
     def bulk_sync_alegra(self, request):
         ser = IdsSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        result = bulk_sync_customers_to_alegra(
-            ser.validated_data["ids"], actor=request.user
+        ids = list(
+            Customer.objects.filter(id__in=ser.validated_data["ids"]).values_list(
+                "id", "name"
+            )
         )
-        status_code = 200 if result["failed"] == 0 else 207
-        return Response(result, status=status_code)
+        if not ids:
+            return Response(
+                {"detail": "Ningún cliente válido para sincronizar."},
+                status=400,
+            )
+        batch = BatchJob.objects.create(
+            job_type=BatchJobType.SYNC_CUSTOMERS,
+            status=BatchJobStatus.PENDING,
+            total=len(ids),
+            created_by=request.user,
+        )
+        for cid, name in ids:
+            BatchJobItem.objects.create(
+                batch=batch,
+                ref_type="Customer",
+                ref_id=str(cid),
+                status=BatchItemStatus.PENDING,
+                result={"name": name or ""},
+            )
+        enqueue_sync_customers.delay(str(batch.id), str(request.user.id))
+        return Response(BatchJobSerializer(batch).data, status=202)
 
     @action(detail=False, methods=["post"], url_path="bulk-normalize-documents")
     def bulk_normalize_documents(self, request):

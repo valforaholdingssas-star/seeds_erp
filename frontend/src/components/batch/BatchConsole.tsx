@@ -59,7 +59,14 @@ export function BatchConsole() {
               className="rounded-[16px] border border-line bg-warm-white px-3 py-2 text-sm"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-green-900">{item.ref_id}</span>
+                <span className="font-medium text-green-900">
+                  {String(
+                    item.result?.name ||
+                      item.result?.tracking_number ||
+                      item.result?.number ||
+                      item.ref_id,
+                  )}
+                </span>
                 <Badge variant={statusBadge[item.status] || "dark"}>{item.status}</Badge>
               </div>
               {item.error ? (
@@ -67,7 +74,8 @@ export function BatchConsole() {
               ) : item.result && Object.keys(item.result).length > 0 ? (
                 <p className="mt-1 text-xs text-text-muted">
                   {String(
-                    item.result.tracking_number ||
+                    item.result.alegra_id ||
+                      item.result.tracking_number ||
                       item.result.number ||
                       item.result.status ||
                       item.result.order_id ||

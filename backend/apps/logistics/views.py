@@ -33,7 +33,9 @@ from apps.logistics.services.shipments import (
 )
 from apps.logistics.tasks import enqueue_generate_shipments, run_format_batch
 from apps.sales.models import SaleState
+from apps.users.module_access import user_can
 from apps.users.permissions import IsModuleRole
+from rest_framework.permissions import BasePermission
 
 
 def _client_ip(request) -> str | None:
@@ -269,14 +271,20 @@ class ShipmentViewSet(viewsets.ModelViewSet):
         return Response({"updated": updated})
 
 
+class CanViewBatches(BasePermission):
+    """Batches are shared by logistics and accounting (invoices / clients)."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        return user_can(user, "logistics", "r") or user_can(user, "accounting", "r")
+
+
 class BatchJobViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_module = "logistics"
     queryset = BatchJob.objects.prefetch_related("items").all()
     serializer_class = BatchJobSerializer
-
-    def get_permissions(self):
-        self.module_roles = ["LOGISTICA", "VENTAS", "SUPERVISOR", "ADMIN"]
-        return [IsModuleRole()]
+    permission_classes = [CanViewBatches]
 
 
 class DispatchListView(APIView):
