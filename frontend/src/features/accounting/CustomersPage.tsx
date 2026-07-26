@@ -11,6 +11,7 @@ import { MockModeBanner } from "@/components/ui/MockModeBanner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationBar } from "@/components/ui/PaginationBar";
 import { useBatchConsole } from "@/features/batch/batchStore";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 
 type Customer = {
   id: string;
@@ -59,14 +60,16 @@ export function CustomersPage() {
   const [filter, setFilter] = useState<"all" | "pending" | "synced">("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [searchInput, setSearchInput] = useState("");
+  const search = useDebouncedValue(searchInput, 350);
 
   useEffect(() => {
     setPage(1);
     setSelected([]);
-  }, [filter]);
+  }, [filter, search]);
 
   const customers = useQuery({
-    queryKey: ["customers", filter, page, pageSize],
+    queryKey: ["customers", filter, page, pageSize, search],
     queryFn: async () => {
       const q = new URLSearchParams({
         page: String(page),
@@ -75,6 +78,7 @@ export function CustomersPage() {
       });
       if (filter === "pending") q.set("alegra_synced", "false");
       if (filter === "synced") q.set("alegra_synced", "true");
+      if (search.trim()) q.set("search", search.trim());
       const { data } = await apiClient.get<Paginated<Customer>>(
         `/accounting/customers/?${q}`,
       );
@@ -427,7 +431,9 @@ export function CustomersPage() {
       <DataTable
         data={rows}
         columns={columns}
-        searchableKeys={["name", "id_number", "email", "city"]}
+        searchQuery={searchInput}
+        onSearchQueryChange={setSearchInput}
+        searchTotalCount={totalCount}
         emptyTitle="Sin clientes"
         emptyDescription="Aparecen al promover ventas al consolidado."
         onSelectionChange={setSelected}

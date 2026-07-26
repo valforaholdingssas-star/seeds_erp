@@ -65,12 +65,23 @@ class EnviaPaymentsView(APIView):
         date_from = parse_date(request.query_params.get("from") or "")
         date_to = parse_date(request.query_params.get("to") or "")
         status_filter = (request.query_params.get("status") or "").strip()
+        search = (request.query_params.get("search") or "").strip()
         if date_from:
             qs = qs.filter(created_at__date__gte=date_from)
         if date_to:
             qs = qs.filter(created_at__date__lte=date_to)
         if status_filter:
             qs = qs.filter(status=status_filter)
+        if search:
+            from django.db.models import Q
+
+            qs = qs.filter(
+                Q(sale__external_id__icontains=search)
+                | Q(sale__customer_name__icontains=search)
+                | Q(tracking_number__icontains=search)
+                | Q(generated_city__icontains=search)
+                | Q(city_mirror__icontains=search)
+            )
 
         agg = qs.aggregate(
             total_paid=Sum("shipping_cost"),

@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationBar } from "@/components/ui/PaginationBar";
 import { formatCOP } from "@/lib/utils";
 import { useBatchConsole } from "@/features/batch/batchStore";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 
 const INV_STATUSES = ["POR_GENERAR", "ENVIANDO", "GENERADA", "FALLIDA", "ANULADA"] as const;
 
@@ -59,14 +60,16 @@ export function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [searchInput, setSearchInput] = useState("");
+  const search = useDebouncedValue(searchInput, 350);
 
   useEffect(() => {
     setPage(1);
     setSelected([]);
-  }, [readyOnly, statusFilter]);
+  }, [readyOnly, statusFilter, search]);
 
   const invoices = useQuery({
-    queryKey: ["invoices", readyOnly, statusFilter, page, pageSize],
+    queryKey: ["invoices", readyOnly, statusFilter, page, pageSize, search],
     queryFn: async () => {
       const q = new URLSearchParams({
         page: String(page),
@@ -78,6 +81,7 @@ export function InvoicesPage() {
       } else if (statusFilter) {
         q.set("status", statusFilter);
       }
+      if (search.trim()) q.set("search", search.trim());
       const { data } = await apiClient.get<Paginated<Invoice>>(
         `/accounting/invoices/?${q}`,
       );
@@ -421,7 +425,9 @@ export function InvoicesPage() {
         <DataTable
           data={rows}
           columns={columns}
-          searchableKeys={["sale_external_id", "customer_name", "status", "number"]}
+          searchQuery={searchInput}
+          onSearchQueryChange={setSearchInput}
+          searchTotalCount={totalCount}
           onSelectionChange={setSelected}
           exportFilename="facturas.csv"
           emptyTitle="Sin facturas"

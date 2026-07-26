@@ -32,6 +32,14 @@ export type DataTableProps<T> = {
   /** Acciones extra a la derecha de la barra (antes de filtros/export) */
   toolbarActions?: ReactNode;
   hint?: string;
+  /**
+   * Server-side search: parent owns the query and fetches from the API.
+   * When set, the table does NOT filter rows locally by the search box.
+   */
+  searchQuery?: string;
+  onSearchQueryChange?: (value: string) => void;
+  /** Total matches from the API (shown in toolbar). Defaults to current page length. */
+  searchTotalCount?: number;
 };
 
 function SelectAllHeader<T>({ table }: { table: Table<T> }) {
@@ -65,8 +73,14 @@ export function DataTable<T extends { id: string }>({
   exportFilename,
   toolbarActions,
   hint,
+  searchQuery,
+  onSearchQueryChange,
+  searchTotalCount,
 }: DataTableProps<T>) {
-  const [query, setQuery] = useState("");
+  const serverSearch = typeof onSearchQueryChange === "function";
+  const [localQuery, setLocalQuery] = useState("");
+  const query = serverSearch ? (searchQuery ?? "") : localQuery;
+  const setQuery = serverSearch ? onSearchQueryChange! : setLocalQuery;
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [draftFilters, setDraftFilters] = useState<Record<string, string>>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -90,7 +104,8 @@ export function DataTable<T extends { id: string }>({
 
   const filtered = useMemo(() => {
     let rows = data;
-    if (query.trim() && stableSearchKeys.length) {
+    // Local text search only when the parent is not driving server search.
+    if (!serverSearch && query.trim() && stableSearchKeys.length) {
       const q = query.toLowerCase();
       rows = rows.filter((row) =>
         stableSearchKeys.some((key) =>
@@ -114,7 +129,7 @@ export function DataTable<T extends { id: string }>({
       });
     }
     return rows;
-  }, [data, query, stableSearchKeys, filters]);
+  }, [data, query, stableSearchKeys, filters, serverSearch]);
 
   // Drop selection for rows no longer visible after filter/search.
   useEffect(() => {
@@ -243,7 +258,8 @@ export function DataTable<T extends { id: string }>({
               </Button>
             ) : null}
             <span className="hidden whitespace-nowrap px-1 label-caps text-text-soft sm:inline">
-              {filtered.length} reg.
+              {(serverSearch ? (searchTotalCount ?? data.length) : filtered.length)}{" "}
+              reg.
             </span>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Ban, Copy, FileText, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
 import { apiClient } from "@/lib/apiClient";
 import { DataTable } from "@/components/data/DataTable";
@@ -11,8 +11,10 @@ import { Button } from "@/components/ui/Button";
 import { InlineText } from "@/components/ui/InlineText";
 import { MockModeBanner } from "@/components/ui/MockModeBanner";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PaginationBar } from "@/components/ui/PaginationBar";
 import { formatCOP, formatSaleDate } from "@/lib/utils";
 import { useBatchConsole } from "@/features/batch/batchStore";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 
 async function copyText(text: string) {
   try {
@@ -83,16 +85,37 @@ export function ShipmentsPage() {
   const [batchMsg, setBatchMsg] = useState<string | null>(null);
   const [bulkCity, setBulkCity] = useState("");
   const [bulkState, setBulkState] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [searchInput, setSearchInput] = useState("");
+  const search = useDebouncedValue(searchInput, 350);
+
+  useEffect(() => {
+    setPage(1);
+    setSelected([]);
+  }, [search]);
 
   const shipments = useQuery({
-    queryKey: ["shipments"],
+    queryKey: ["shipments", page, pageSize, search],
     queryFn: async () => {
-      const { data } = await apiClient.get<Paginated<Shipment> | Shipment[]>(
+      const params: Record<string, string | number> = {
+        page,
+        page_size: pageSize,
+      };
+      if (search.trim()) params.search = search.trim();
+      const { data } = await apiClient.get<Paginated<Shipment>>(
         "/logistics/shipments/",
+        { params },
       );
-      return Array.isArray(data) ? data : data.results;
+      return {
+        results: data.results || [],
+        count: data.count ?? 0,
+      };
     },
   });
+
+  const shipmentRows = shipments.data?.results || [];
+  const totalCount = shipments.data?.count || 0;
 
   const patchMirror = useMutation({
     mutationFn: async ({
@@ -434,7 +457,7 @@ export function ShipmentsPage() {
 
   const kanbanItems = useMemo<KanbanItem[]>(
     () =>
-      (shipments.data || []).map((s) => ({
+      shipmentRows.map((s) => ({
         id: s.id,
         columnId: SHIP_STATUSES.includes(s.status as (typeof SHIP_STATUSES)[number])
           ? s.status
@@ -442,7 +465,7 @@ export function ShipmentsPage() {
         title: s.customer_name || s.sale_external_id,
         subtitle: `${s.city_mirror || s.city_raw || "—"} · ${s.tracking_number || "sin guía"}`,
       })),
-    [shipments.data],
+    [shipmentRows],
   );
 
   return (
@@ -493,6 +516,21 @@ export function ShipmentsPage() {
 
       {batchMsg ? <Alert variant="info">{batchMsg}</Alert> : null}
 
+      <PaginationBar
+        page={page}
+        pageSize={pageSize}
+        total={totalCount}
+        onPageChange={(p) => {
+          setPage(p);
+          setSelected([]);
+        }}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+          setSelected([]);
+        }}
+      />
+
       {view === "kanban" ? (
         <KanbanBoard
           columns={SHIP_STATUSES.map((s) => ({
@@ -506,17 +544,11 @@ export function ShipmentsPage() {
         />
       ) : (
         <DataTable
-          data={shipments.data || []}
+          data={shipmentRows}
           columns={columns}
-          searchableKeys={[
-            "sale_external_id",
-            "customer_name",
-            "city_mirror",
-            "status",
-            "tracking_number",
-            "tracking_url",
-            "address_mirror",
-          ]}
+          searchQuery={searchInput}
+          onSearchQueryChange={setSearchInput}
+          searchTotalCount={totalCount}
           columnFilters={[
             {
               key: "status",
@@ -540,7 +572,7 @@ export function ShipmentsPage() {
           ]}
           onSelectionChange={setSelected}
           exportFilename="envios.csv"
-          hint="Los filtros warning/do_not_ship usan true/false."
+          hint="La búsqueda cubre toda la base (pedido, cliente, ciudad, guía)."
           bulkActions={
             <>
               <input

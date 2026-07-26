@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiClient } from "@/lib/apiClient";
 import { DataTable } from "@/components/data/DataTable";
@@ -10,6 +10,7 @@ import { FieldLabel, Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationBar } from "@/components/ui/PaginationBar";
 import { formatCOP } from "@/lib/utils";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 
 type EnviaPayment = {
   id: string;
@@ -42,9 +43,15 @@ export function EnviaPaymentsPage() {
   const [to, setTo] = useState(today);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [searchInput, setSearchInput] = useState("");
+  const search = useDebouncedValue(searchInput, 350);
+
+  useEffect(() => {
+    setPage(1);
+  }, [from, to, search]);
 
   const data = useQuery({
-    queryKey: ["envia-payments", from, to, page, pageSize],
+    queryKey: ["envia-payments", from, to, page, pageSize, search],
     queryFn: async () => {
       const q = new URLSearchParams({
         from,
@@ -52,6 +59,7 @@ export function EnviaPaymentsPage() {
         page: String(page),
         page_size: String(pageSize),
       });
+      if (search.trim()) q.set("search", search.trim());
       const { data: res } = await apiClient.get<EnviaPaymentsResponse>(
         `/logistics/envia-payments/?${q}`,
       );
@@ -163,7 +171,9 @@ export function EnviaPaymentsPage() {
       <DataTable
         data={data.data?.results || []}
         columns={columns}
-        searchableKeys={["sale_external_id", "customer_name", "tracking_number", "city"]}
+        searchQuery={searchInput}
+        onSearchQueryChange={setSearchInput}
+        searchTotalCount={data.data?.count || 0}
         emptyTitle="Sin pagos Envia"
         emptyDescription="Aparecen cuando una guía genera shipping_cost."
         hint={data.data?.hint}

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Eye, Trash2 } from "lucide-react";
 import { apiClient } from "@/lib/apiClient";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { InlineSelect } from "@/components/ui/InlineSelect";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationBar } from "@/components/ui/PaginationBar";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { formatCOP, formatSaleDate } from "@/lib/utils";
 import { formatSaleItemLine } from "@/lib/kitTypes";
 
@@ -59,13 +60,23 @@ export function SalesPage() {
   const [bulkFulfillment, setBulkFulfillment] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [searchInput, setSearchInput] = useState("");
+  const search = useDebouncedValue(searchInput, 350);
+
+  useEffect(() => {
+    setPage(1);
+    setSelected([]);
+  }, [search]);
 
   const sales = useQuery({
-    queryKey: ["sales", page, pageSize],
+    queryKey: ["sales", page, pageSize, search],
     queryFn: async () => {
-      const { data } = await apiClient.get<Paginated<Sale>>("/sales/", {
-        params: { page, page_size: pageSize },
-      });
+      const params: Record<string, string | number> = {
+        page,
+        page_size: pageSize,
+      };
+      if (search.trim()) params.search = search.trim();
+      const { data } = await apiClient.get<Paginated<Sale>>("/sales/", { params });
       return {
         results: data.results || [],
         count: data.count ?? 0,
@@ -381,17 +392,9 @@ export function SalesPage() {
         <DataTable
           data={saleRows}
           columns={columns}
-          searchableKeys={[
-            "external_id",
-            "customer_name",
-            "city_raw",
-            "source",
-            "status",
-            "payment_account",
-            "fulfillment_type",
-            "phone",
-            "email",
-          ]}
+          searchQuery={searchInput}
+          onSearchQueryChange={setSearchInput}
+          searchTotalCount={totalCount}
           columnFilters={[
             { key: "source", label: "Canal", type: "select", options: SOURCES },
             {
@@ -406,7 +409,7 @@ export function SalesPage() {
           ]}
           onSelectionChange={setSelected}
           exportFilename="ventas.csv"
-          hint="Scroll horizontal si la tabla no cabe. Clic en los pills para editar."
+          hint="La búsqueda cubre toda la base (nombre, ID, email, teléfono, documento, ciudad)."
           bulkActions={
             <>
               <select
