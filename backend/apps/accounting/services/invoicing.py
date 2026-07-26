@@ -108,7 +108,8 @@ def ensure_invoice_for_sale(sale, *, actor=None) -> Invoice | None:
 def sync_customer_to_alegra(customer: Customer, *, actor=None, force: bool = False) -> Customer:
     from apps.accounting.services.alegra import resolve_customer_display_name
 
-    display = resolve_customer_display_name(customer)
+    # Prefer Kommo contact.name over lead-id / email fallbacks.
+    display = resolve_customer_display_name(customer, refresh_kommo=True)
     if display and display != (customer.name or "").strip():
         customer.name = display
         customer.save(update_fields=["name", "updated_at"])

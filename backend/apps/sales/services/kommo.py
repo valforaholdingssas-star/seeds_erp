@@ -90,6 +90,45 @@ def _parse_kommo_closed_at(value) -> datetime | None:
     return None
 
 
+def _is_weak_kommo_name(value: str, *, lead_id: str = "") -> bool:
+    v = (value or "").strip()
+    if not v:
+        return True
+    if lead_id and v == str(lead_id).strip():
+        return True
+    if v.isdigit():
+        return True
+    if re.fullmatch(r"lead\s*#?\s*\d+", v, flags=re.IGNORECASE):
+        return True
+    return False
+
+
+def fetch_contact_name_for_lead(lead_id: str) -> str:
+    """Live Kommo contact.name for a lead (person name, not lead title)."""
+    from apps.sales.services.kommo_client import fetch_contact, fetch_lead, kommo_configured
+
+    lead_id = str(lead_id or "").strip()
+    if not lead_id or not kommo_configured():
+        return ""
+    lead = fetch_lead(lead_id)
+    embedded = (lead.get("_embedded") or {}).get("contacts") or []
+    if not embedded:
+        return ""
+    cid = str(embedded[0].get("id") or "").strip()
+    if not cid:
+        return ""
+    contact = fetch_contact(cid)
+    name = (contact.get("name") or "").strip()
+    if name and not _is_weak_kommo_name(name, lead_id=lead_id):
+        return name
+    first = (contact.get("first_name") or "").strip()
+    last = (contact.get("last_name") or "").strip()
+    combined = f"{first} {last}".strip()
+    if combined and not _is_weak_kommo_name(combined, lead_id=lead_id):
+        return combined
+    return ""
+
+
 @transaction.atomic
 def upsert_kommo_from_enriched(
     *,
@@ -144,18 +183,20 @@ def upsert_kommo_from_enriched(
     payment_raw = _cf(cfs, field_name="Medio de pago")
     payment_method = resolve_payment_method(payment_raw, actor=actor)
 
-    lead_id = str(lead.get("id") or "")
+    # Source of truth: Kommo CONTACT name (not lead title "Lead #id").
     contact_name = (contact.get("name") or "").strip()
+    if not contact_name:
+        first = (contact.get("first_name") or "").strip()
+        last = (contact.get("last_name") or "").strip()
+        contact_name = f"{first} {last}".strip()
     lead_name = (lead.get("name") or "").strip()
-    # Kommo often puts the numeric lead id as contact/lead name — prefer email local part.
-    def _weak_name(value: str) -> bool:
-        v = (value or "").strip()
-        return (not v) or v.isdigit() or v == lead_id
 
-    customer_name = contact_name if not _weak_name(contact_name) else ""
-    if not customer_name and lead_name and not _weak_name(lead_name):
+    customer_name = ""
+    if contact_name and not _is_weak_kommo_name(contact_name, lead_id=lead_id):
+        customer_name = contact_name
+    elif lead_name and not _is_weak_kommo_name(lead_name, lead_id=lead_id):
         customer_name = lead_name
-    if not customer_name and email:
+    elif email:
         local = email.split("@", 1)[0]
         local = local.replace(".", " ").replace("_", " ").replace("+", " ").strip()
         if local and not local.isdigit():

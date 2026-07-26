@@ -74,17 +74,21 @@ def _split_person_name(full: str) -> dict[str, str]:
     }
 
 
-def _is_weak_person_name(value: str, *, id_number: str = "") -> bool:
+def _is_weak_person_name(value: str, *, id_number: str = "", lead_id: str = "") -> bool:
     """True when the 'name' is really an order/lead id or empty."""
     name = (value or "").strip()
     if not name:
         return True
+    if lead_id and name == str(lead_id).strip():
+        return True
+    if re.fullmatch(r"lead\s*#?\s*\d+", name, flags=re.IGNORECASE):
+        return True
     digits = _digits_only(name)
-    if digits and digits == _digits_only(name.replace(" ", "")) and name.replace(" ", "").isdigit():
+    if digits and name.replace(" ", "").isdigit():
         return True
     if id_number and _digits_only(name) == _digits_only(id_number) and len(_digits_only(name)) >= 5:
         return True
-    # Single long numeric token (Kommo often uses lead id as name).
+    # Single long numeric token (Kommo often used lead id as name historically).
     if re.fullmatch(r"\d{5,}", name):
         return True
     return False
@@ -98,12 +102,82 @@ def _name_from_email(email: str) -> str:
     return " ".join(p.capitalize() for p in local.split() if p)
 
 
-def resolve_customer_display_name(customer) -> str:
-    """Prefer a human name; never send bare order/lead ids to Alegra."""
+def _name_from_related_sales(customer) -> str:
+    """Prefer a real person name already stored on linked sales."""
+    from apps.sales.models import ConsolidatedSale
+
+    id_number = _digits_only(getattr(customer, "id_number", "") or "")
+    qs = ConsolidatedSale.objects.filter(invoice__customer_id=customer.id)
+    if id_number:
+        qs = qs | ConsolidatedSale.objects.filter(id_number__icontains=id_number)
+    if getattr(customer, "email", None):
+        qs = qs | ConsolidatedSale.objects.filter(email__iexact=customer.email)
+    for sale in qs.order_by("-created_at").only("customer_name", "id_number")[:20]:
+        candidate = (sale.customer_name or "").strip()
+        if not _is_weak_person_name(candidate, id_number=id_number):
+            return candidate
+    return ""
+
+
+def _name_from_kommo_leads(customer) -> str:
+    """Re-fetch Kommo contact.name for linked KOMMO sales (source of truth)."""
+    from apps.sales.models import ConsolidatedSale, SaleSource
+    from apps.sales.services.kommo import fetch_contact_name_for_lead
+
+    id_number = _digits_only(getattr(customer, "id_number", "") or "")
+    qs = ConsolidatedSale.objects.filter(
+        source=SaleSource.KOMMO,
+        invoice__customer_id=customer.id,
+    )
+    if id_number:
+        qs = qs | ConsolidatedSale.objects.filter(
+            source=SaleSource.KOMMO, id_number__icontains=id_number
+        )
+    if getattr(customer, "email", None):
+        qs = qs | ConsolidatedSale.objects.filter(
+            source=SaleSource.KOMMO, email__iexact=customer.email
+        )
+    seen: set[str] = set()
+    for sale in qs.order_by("-created_at").only("external_id", "customer_name")[:10]:
+        lead_id = str(sale.external_id or "").strip()
+        if not lead_id or lead_id in seen:
+            continue
+        seen.add(lead_id)
+        try:
+            name = fetch_contact_name_for_lead(lead_id)
+        except Exception as exc:
+            logger.warning("Kommo name refresh failed for lead %s: %s", lead_id, exc)
+            continue
+        if not name or _is_weak_person_name(name, id_number=id_number, lead_id=lead_id):
+            continue
+        if (sale.customer_name or "").strip() != name:
+            sale.customer_name = name
+            sale.save(update_fields=["customer_name", "updated_at"])
+        return name
+    return ""
+
+
+def resolve_customer_display_name(customer, *, refresh_kommo: bool = False) -> str:
+    """Prefer a human name from Kommo contact / sales; never bare lead ids.
+
+    When ``refresh_kommo`` is True (sync path), Kommo contact.name is the
+    source of truth and overrides weak or email-derived placeholders.
+    """
     id_number = _digits_only(getattr(customer, "id_number", "") or "")
     raw = (getattr(customer, "name", None) or "").strip()
+
+    if refresh_kommo:
+        from_kommo = _name_from_kommo_leads(customer)
+        if from_kommo:
+            return from_kommo
+
     if not _is_weak_person_name(raw, id_number=id_number):
         return raw
+
+    from_sales = _name_from_related_sales(customer)
+    if from_sales:
+        return from_sales
+
     from_email = _name_from_email(getattr(customer, "email", "") or "")
     if from_email:
         return from_email
