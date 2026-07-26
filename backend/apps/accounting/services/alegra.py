@@ -490,31 +490,151 @@ def update_contact(customer) -> dict[str, Any]:
         )
 
 
-def create_invoice(invoice, *, customer_alegra_id: str) -> dict[str, Any]:
-    auth = _auth()
+def _alegra_get_json(client: httpx.Client, path: str, *, params: dict | None = None) -> Any:
+    resp = client.get(f"{_alegra_base_url()}{path}", params=params)
+    if not resp.is_success:
+        raise RuntimeError(f"Alegra GET {path} {resp.status_code}: {resp.text[:300]}")
+    return resp.json()
+
+
+def resolve_iva_tax_id(client: httpx.Client | None = None) -> str:
+    """Return Alegra tax id for IVA 19% sales (NOT Exento/Excluido/Compras)."""
+    configured = str(cfg.get("alegra.iva_tax_id", "") or "").strip()
+    if configured:
+        return configured
+    if client is None:
+        # Safe known id on Seeds account; still prefer live resolve when possible.
+        return "3"
+    taxes = _alegra_get_json(client, "/taxes")
+    if not isinstance(taxes, list):
+        return "3"
+    for tax in taxes:
+        name = str(tax.get("name") or "").lower()
+        pct = str(tax.get("percentage") or "")
+        status = str(tax.get("status") or "")
+        if status and status != "active":
+            continue
+        if pct not in {"19", "19.00", "19.0"}:
+            continue
+        if "compra" in name:
+            continue
+        if tax.get("type") == "IVA" or "iva" in name:
+            return str(tax.get("id"))
+    raise RuntimeError(
+        "No se encontró impuesto IVA 19% activo en Alegra. "
+        "Configura alegra.iva_tax_id en Ajustes."
+    )
+
+
+def resolve_invoice_number_template_id(client: httpx.Client | None = None) -> str:
+    configured = str(cfg.get("alegra.number_template_id", "") or "").strip()
+    if configured:
+        return configured
+    if client is None:
+        return "15"  # Seeds: Factura electrónica SDS
+    templates = _alegra_get_json(client, "/number-templates")
+    if not isinstance(templates, list):
+        return "15"
+    electronic = [
+        t
+        for t in templates
+        if t.get("documentType") == "invoice"
+        and t.get("isElectronic")
+        and t.get("status") == "active"
+    ]
+    if not electronic:
+        raise RuntimeError(
+            "No hay numeración de factura electrónica activa en Alegra. "
+            "Configura alegra.number_template_id."
+        )
+    preferred = next((t for t in electronic if t.get("isDefault")), electronic[0])
+    return str(preferred.get("id"))
+
+
+def resolve_invoice_item_id(client: httpx.Client | None = None) -> str:
+    configured = str(cfg.get("alegra.invoice_item_id", "1") or "1").strip() or "1"
+    if client is None:
+        return configured
+    # Validate exists; else fall back to first active service/item.
+    try:
+        item = _alegra_get_json(client, f"/items/{configured}")
+        if isinstance(item, dict) and item.get("id"):
+            return str(item.get("id"))
+    except Exception:
+        logger.warning("Alegra item %s no encontrado; buscando fallback", configured)
+    items = _alegra_get_json(client, "/items", params={"limit": 20, "status": "active"})
+    if isinstance(items, list) and items:
+        return str(items[0].get("id"))
+    raise RuntimeError(
+        "Alegra exige id de ítem en facturas FE (code 3065). "
+        "Crea un producto/servicio en Alegra y configura alegra.invoice_item_id."
+    )
+
+
+def build_invoice_payload(
+    invoice,
+    *,
+    customer_alegra_id: str,
+    client: httpx.Client | None = None,
+) -> dict[str, Any]:
+    """Colombia FE invoice body aligned with live Alegra account.
+
+    Hard lessons from Seeds account:
+    - tax id 1 = IVA Exento (0%). Sales IVA 19% is id 3.
+    - item id is mandatory (code 3065); free-text-only items are rejected.
+    - use electronic numberTemplate (SDS / id 15).
+    - price must be sin IVA; Alegra adds tax.
+    """
     sale = invoice.sale
-    payload = {
-        "date": (sale.closed_at or invoice.created_at).date().isoformat(),
-        "dueDate": (sale.closed_at or invoice.created_at).date().isoformat(),
-        "client": {"id": customer_alegra_id},
+    inv_date = (sale.closed_at or invoice.created_at).date().isoformat()
+    net = sale.net_value if sale.net_value is not None else sale.total_value
+    try:
+        price = float(net or 0)
+    except (TypeError, ValueError):
+        price = 0.0
+    if price <= 0:
+        raise RuntimeError(
+            f"Valor neto inválido para facturar (net_value={sale.net_value}, "
+            f"total={sale.total_value})."
+        )
+
+    tax_id = resolve_iva_tax_id(client)
+    template_id = resolve_invoice_number_template_id(client)
+    item_id = resolve_invoice_item_id(client)
+
+    payload: dict[str, Any] = {
+        "date": inv_date,
+        "dueDate": inv_date,
+        "client": {"id": str(customer_alegra_id)},
+        "numberTemplate": {"id": str(template_id)},
+        "paymentForm": "CASH",
+        "paymentMethod": "INSTRUMENT_NOT_DEFINED",
         "items": [
             {
-                "name": f"Seeds · pedido {sale.external_id}",
-                "price": float(sale.net_value or sale.total_value),
+                "id": int(item_id) if str(item_id).isdigit() else item_id,
+                "price": price,
                 "quantity": 1,
-                "tax": [{"id": 1, "name": "IVA", "percentage": 19}],
+                "tax": [{"id": int(tax_id) if str(tax_id).isdigit() else tax_id}],
+                "description": f"Seeds · pedido {sale.external_id}",
             }
         ],
         "anotation": f"Seeds ERP {invoice.idempotency_key}",
         "status": "open",
     }
+    return payload
+
+
+def create_invoice(invoice, *, customer_alegra_id: str) -> dict[str, Any]:
+    auth = _auth()
+    sale = invoice.sale
     url = f"{_alegra_base_url()}/invoices"
     started = time.monotonic()
+    payload = build_invoice_payload(invoice, customer_alegra_id=customer_alegra_id)
 
     if not auth:
         body = {
             "id": f"mock-inv-{invoice.idempotency_key}",
-            "number": f"FE-{sale.external_id[-6:]}",
+            "number": f"FE-{str(sale.external_id)[-6:]}",
             "cufe": f"CUFE-MOCK-{sale.external_id}",
             "pdf": "https://example.com/invoice.pdf",
             "_mock": True,
@@ -536,6 +656,9 @@ def create_invoice(invoice, *, customer_alegra_id: str) -> dict[str, Any]:
     limiter.acquire(timeout=60)
     headers = {"Idempotency-Key": invoice.idempotency_key}
     with httpx.Client(timeout=45.0, auth=auth) as client:
+        payload = build_invoice_payload(
+            invoice, customer_alegra_id=customer_alegra_id, client=client
+        )
         resp = client.post(url, json=payload, headers=headers)
     latency = int((time.monotonic() - started) * 1000)
     try:

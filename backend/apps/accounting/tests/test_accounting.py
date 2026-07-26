@@ -166,28 +166,17 @@ def test_build_contact_payload_includes_department(db):
 
 
 @pytest.mark.django_db
-def test_resolve_weak_kommo_name_from_email(db):
-    from apps.accounting.models import Customer
-    from apps.accounting.services.alegra import build_contact_payload
-    from apps.geo.models import GeoCatalog
+def test_build_invoice_payload_uses_iva19_and_item_id(db, sale):
+    from apps.accounting.services.alegra import build_invoice_payload
+    from apps.accounting.services.invoicing import ensure_invoice_for_sale
 
-    GeoCatalog.objects.get_or_create(
-        municipality_code="11001000",
-        defaults={
-            "municipality": "Bogotá",
-            "department": "Bogotá D.C.",
-            "department_iso": "DC",
-            "search": "bogota",
-        },
-    )
-    customer = Customer.objects.create(
-        name="13085108",
-        id_type="CC",
-        id_number="35220189",
-        city="La calera",
-        email="ebescobars@gmail.com",
-    )
-    payload = build_contact_payload(customer)
-    assert payload["nameObject"]["firstName"] == "Ebescobars"
-    assert payload["nameObject"]["lastName"] == "-"
-    assert payload["nameObject"]["firstName"] != "13085108"
+    invoice = ensure_invoice_for_sale(sale)
+    payload = build_invoice_payload(invoice, customer_alegra_id="879")
+    assert payload["client"] == {"id": "879"}
+    assert payload["numberTemplate"]["id"] == "15"
+    item = payload["items"][0]
+    assert item["id"] == 1
+    assert item["tax"] == [{"id": 3}]
+    assert item["price"] > 0
+    assert "name" not in item or item.get("id")
+    assert payload["paymentForm"] == "CASH"

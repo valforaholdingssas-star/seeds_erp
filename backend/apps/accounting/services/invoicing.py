@@ -333,8 +333,15 @@ def issue_invoice(invoice_id, *, actor=None) -> Invoice:
     try:
         body = alegra_client.create_invoice(invoice, customer_alegra_id=customer.alegra_id)
         invoice.alegra_id = str(body.get("id") or "")
-        invoice.number = str(body.get("number") or body.get("numberTemplate", {}).get("number") or "")
-        invoice.cufe = str(body.get("cufe") or body.get("stamp", {}).get("cufe") or "")
+        nt = body.get("numberTemplate") if isinstance(body.get("numberTemplate"), dict) else {}
+        invoice.number = str(
+            body.get("number")
+            or nt.get("fullNumber")
+            or nt.get("number")
+            or ""
+        )
+        stamp = body.get("stamp") if isinstance(body.get("stamp"), dict) else {}
+        invoice.cufe = str(body.get("cufe") or stamp.get("cufe") or "")
         invoice.pdf_url = str(body.get("pdf") or body.get("pdfUrl") or "")
         invoice.status = InvoiceStatus.GENERADA
         invoice.confirmed_at = timezone.now()

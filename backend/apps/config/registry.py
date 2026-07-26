@@ -183,6 +183,30 @@ SETTINGS: list[Setting] = [
         type=SettingType.SECRET,
         help="Token de API de Alegra (Basic Auth).",
     ),
+    Setting(
+        key="alegra.invoice_item_id",
+        label="ID ítem factura (Alegra)",
+        group="ALEGRA",
+        type=SettingType.STRING,
+        default="1",
+        help="ID del producto/servicio en Alegra (obligatorio en FE). Por defecto EARSEEDING MRR = 1.",
+    ),
+    Setting(
+        key="alegra.iva_tax_id",
+        label="ID impuesto IVA 19%",
+        group="ALEGRA",
+        type=SettingType.STRING,
+        default="",
+        help="Vacío = autodetectar impuesto IVA 19% activo. No usar id 1 (Exento).",
+    ),
+    Setting(
+        key="alegra.number_template_id",
+        label="ID numeración electrónica",
+        group="ALEGRA",
+        type=SettingType.STRING,
+        default="",
+        help="Vacío = autodetectar plantilla invoice electrónica (SDS).",
+    ),
     # WooCommerce
     Setting(
         key="woocommerce.store_url",
