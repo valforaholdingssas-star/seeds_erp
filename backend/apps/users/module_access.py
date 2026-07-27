@@ -370,6 +370,7 @@ ACTION_TO_CRUD: dict[str, Crud] = {
     "format_ai": "u",
     "cancel_local": "d",
     "reopen": "u",
+    "reopen_after_void": "u",
     "seed_system": "u",
     "resolve": "r",
     "bulk_classify": "u",
