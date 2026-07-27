@@ -83,6 +83,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self) -> str:
         return f"{self.full_name} <{self.email}>"
 
+    def get_full_name(self) -> str:
+        return self.full_name or self.email
+
+    def get_short_name(self) -> str:
+        return (self.full_name or self.email).split()[0]
+
     def save(self, *args, **kwargs):
         self.is_active = self.status == UserStatus.ACTIVE
         super().save(*args, **kwargs)

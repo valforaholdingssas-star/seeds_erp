@@ -125,12 +125,14 @@ class ExpenseSerializer(serializers.ModelSerializer):
     def get_responsible_name(self, obj):
         if not obj.responsible_id:
             return ""
-        return obj.responsible.get_full_name() or obj.responsible.username
+        user = obj.responsible
+        return (getattr(user, "full_name", None) or getattr(user, "email", "") or "").strip()
 
     def get_created_by_name(self, obj):
         if not obj.created_by_id:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        user = obj.created_by
+        return (getattr(user, "full_name", None) or getattr(user, "email", "") or "").strip()
 
     def get_has_payment_proof(self, obj):
         return any(a.kind == "PAYMENT_PROOF" for a in obj.attachments.all())
