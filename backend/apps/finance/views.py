@@ -17,6 +17,7 @@ from apps.finance.models import (
     EfeBudget,
     EfeMonthClose,
     FinancialAccount,
+    MovementStatus,
 )
 from apps.finance.serializers import (
     AccountingAccountSerializer,
@@ -143,6 +144,41 @@ class BankMovementViewSet(viewsets.ModelViewSet):
     ]
     search_fields = ["concept", "reference", "comment", "dedupe_hash", "tx_code"]
     ordering_fields = ["date", "value", "created_at", "status"]
+    ordering = ["-date", "-created_at"]
+
+    def get_queryset(self):
+        from decimal import Decimal, InvalidOperation
+
+        from django.utils.dateparse import parse_date
+
+        qs = super().get_queryset()
+        params = self.request.query_params
+        date_from = parse_date(params.get("date_from") or "")
+        date_to = parse_date(params.get("date_to") or "")
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        for key, lookup in (("value_min", "value__gte"), ("value_max", "value__lte")):
+            raw = (params.get(key) or "").strip().replace(",", ".")
+            if not raw:
+                continue
+            try:
+                qs = qs.filter(**{lookup: Decimal(raw)})
+            except (InvalidOperation, ValueError):
+                continue
+        return qs
+
+    def perform_update(self, serializer):
+        mov = serializer.save()
+        # Keep status coherent when editing EFE / interbank from the table.
+        if mov.financial_account_id or mov.is_interbank:
+            if mov.status == MovementStatus.POR_CLASIFICAR:
+                mov.status = MovementStatus.CLASIFICADO
+                mov.save(update_fields=["status", "updated_at"])
+        elif mov.status == MovementStatus.CLASIFICADO and not mov.financial_account_id:
+            mov.status = MovementStatus.POR_CLASIFICAR
+            mov.save(update_fields=["status", "updated_at"])
 
     @action(detail=False, methods=["post"], url_path="bulk-classify")
     def bulk_classify(self, request):

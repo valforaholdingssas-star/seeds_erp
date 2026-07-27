@@ -10,6 +10,9 @@ type Props = {
   tone?: "dark" | "sage" | "terracotta" | "wine";
   disabled?: boolean;
   onChange: (value: string) => void | Promise<void>;
+  /** Wider dropdown for long labels (e.g. EFE accounts). */
+  selectClassName?: string;
+  buttonClassName?: string;
 };
 
 const toneClass: Record<NonNullable<Props["tone"]>, string> = {
@@ -26,6 +29,8 @@ export function InlineSelect({
   tone = "dark",
   disabled,
   onChange,
+  selectClassName,
+  buttonClassName,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -50,7 +55,10 @@ export function InlineSelect({
     return (
       <select
         ref={ref}
-        className="max-w-[160px] rounded-full border border-line bg-warm-white px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-sage-500/30"
+        className={cn(
+          "max-w-[min(100vw,22rem)] rounded-full border border-line bg-warm-white px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-sage-500/30",
+          selectClassName,
+        )}
         value={value}
         disabled={saving}
         onChange={async (e) => {
@@ -73,7 +81,7 @@ export function InlineSelect({
         onClick={(e) => e.stopPropagation()}
       >
         {options.map((o) => (
-          <option key={o.value} value={o.value}>
+          <option key={o.value || "__empty"} value={o.value}>
             {o.label}
           </option>
         ))}
@@ -90,13 +98,14 @@ export function InlineSelect({
         setEditing(true);
       }}
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] label-caps transition-all hover:ring-2 hover:ring-sage-500/30",
+        "inline-flex max-w-[min(100vw,22rem)] items-center gap-1 truncate rounded-full px-2.5 py-1 text-left text-[10px] label-caps transition-all hover:ring-2 hover:ring-sage-500/30",
         toneClass[tone],
         saving && "opacity-60",
+        buttonClassName,
       )}
     >
-      {label}
-      <span aria-hidden className="text-[8px] opacity-70">
+      <span className="truncate">{label}</span>
+      <span aria-hidden className="shrink-0 text-[8px] opacity-70">
         ▾
       </span>
     </button>
