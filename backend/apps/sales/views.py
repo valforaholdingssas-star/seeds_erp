@@ -24,6 +24,8 @@ from apps.sales.services.normalization import calc_fiscal, guide_cost_for_sale, 
 from apps.sales.services.failed_ecommerce import list_failed_ecommerce, update_follow_up
 from apps.sales.services.resync import start_shopify_resync, start_woo_resync
 from apps.sales.models import FollowUpStatus
+from apps.sellers.goals import goals_matrix, upsert_goals
+from apps.audit.services import log_audit_event as _log_audit
 from apps.sales.tasks import (
     enqueue_shopify_resync,
     enqueue_woo_resync,
@@ -467,6 +469,47 @@ class FailedEcommerceDetailView(APIView):
         except LookupError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
         return Response(row)
+
+
+class SalesGoalsView(APIView):
+    """Metas mensuales por comercial (matriz año × meses)."""
+
+    permission_module = "sales"
+    module_roles = ["VENTAS", "SUPERVISOR", "VIEWER"]
+    permission_classes = [IsModuleRole]
+
+    def get(self, request):
+        try:
+            year = int(request.query_params.get("year") or 0)
+        except (TypeError, ValueError):
+            year = 0
+        if year < 2000 or year > 2100:
+            year = timezone.localdate().year
+        return Response(goals_matrix(year=year))
+
+    def put(self, request):
+        try:
+            year = int(request.data.get("year") or 0)
+        except (TypeError, ValueError):
+            year = 0
+        if year < 2000 or year > 2100:
+            year = timezone.localdate().year
+        items = request.data.get("items") or []
+        if not isinstance(items, list):
+            return Response(
+                {"detail": "items debe ser una lista."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        result = upsert_goals(year=year, items=items)
+        _log_audit(
+            actor=request.user,
+            action="SELLER_MONTHLY_GOALS_UPSERT",
+            entity="SellerMonthlyGoal",
+            entity_id=str(year),
+            metadata={"saved": result.get("saved"), "deleted": result.get("deleted")},
+            ip=_client_ip(request),
+        )
+        return Response(result)
 
 
 class KommoWebhookView(APIView):

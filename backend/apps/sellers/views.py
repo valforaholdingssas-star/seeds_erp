@@ -6,6 +6,7 @@ from apps.audit.services import log_audit_event
 from apps.sellers.models import Vendedor
 from apps.sellers.serializers import VendedorSerializer
 from apps.sellers.services import ensure_system_vendors, resolve_vendedor
+from apps.sellers.goals import goals_matrix, upsert_goals
 from apps.users.permissions import IsAdmin, IsModuleRole
 
 
@@ -78,6 +79,41 @@ class VendedorViewSet(viewsets.ModelViewSet):
                 "detail": f"{len(created)} vendedores de sistema creados.",
             }
         )
+
+    @action(detail=False, methods=["get", "put"], url_path="monthly-goals")
+    def monthly_goals(self, request):
+        """
+        GET  ?year=2026 → matriz comercial × meses
+        PUT  {year, items:[{seller_id, month, amount}]} → upsert celdas
+        """
+        try:
+            year = int(request.query_params.get("year") or request.data.get("year") or 0)
+        except (TypeError, ValueError):
+            year = 0
+        if year < 2000 or year > 2100:
+            from django.utils import timezone
+
+            year = timezone.localdate().year
+
+        if request.method == "GET":
+            return Response(goals_matrix(year=year))
+
+        items = request.data.get("items") or []
+        if not isinstance(items, list):
+            return Response(
+                {"detail": "items debe ser una lista."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        result = upsert_goals(year=year, items=items)
+        log_audit_event(
+            actor=request.user,
+            action="SELLER_MONTHLY_GOALS_UPSERT",
+            entity="SellerMonthlyGoal",
+            entity_id=str(year),
+            metadata={"saved": result.get("saved"), "deleted": result.get("deleted")},
+            ip=_client_ip(request),
+        )
+        return Response(result)
 
     @action(detail=False, methods=["get"])
     def resolve(self, request):

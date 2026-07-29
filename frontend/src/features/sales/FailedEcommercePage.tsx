@@ -147,7 +147,7 @@ export function FailedEcommercePage() {
         header: "Canal",
         cell: ({ row }) => (
           <Badge variant="terracotta">
-            {row.original.channel === "SHOPIFY" ? "Shopify" : "Woo"}
+            {row.original.channel === "SHOPIFY" ? "Ecommerce 2" : "Ecommerce"}
           </Badge>
         ),
       },
@@ -264,8 +264,8 @@ export function FailedEcommercePage() {
             onChange={(e) => setChannel(e.target.value as typeof channel)}
           >
             <option value="">Todos</option>
-            <option value="ECOMMERCE">WooCommerce</option>
-            <option value="SHOPIFY">Shopify</option>
+            <option value="ECOMMERCE">Ecommerce</option>
+            <option value="SHOPIFY">Ecommerce 2</option>
           </select>
         </div>
         <div className="min-w-[220px] flex-1">
@@ -286,7 +286,7 @@ export function FailedEcommercePage() {
                 {editing.customer_name || "Sin nombre"} · #{editing.external_id}
               </p>
               <p className="text-sm text-text-muted">
-                {editing.channel === "SHOPIFY" ? "Shopify" : "Woo"} · {editing.status} ·{" "}
+                {editing.channel === "SHOPIFY" ? "Ecommerce 2" : "Ecommerce"} · {editing.status} ·{" "}
                 {money(editing.total_value)}
               </p>
             </div>

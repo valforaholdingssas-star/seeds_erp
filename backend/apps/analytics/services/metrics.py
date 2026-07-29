@@ -81,7 +81,21 @@ def _pct(current: Decimal, previous: Decimal) -> float | None:
     return float(((current - previous) / previous * 100).quantize(Decimal("0.01")))
 
 
-def _goal_month(*, seller: str | None = None) -> Decimal:
+def _goal_month(
+    *,
+    seller: str | None = None,
+    year: int | None = None,
+    month: int | None = None,
+) -> Decimal:
+    if seller and year and month:
+        try:
+            from apps.sellers.goals import get_goal_for_month
+
+            specific = get_goal_for_month(seller_id=seller, year=year, month=month)
+            if specific is not None:
+                return specific
+        except Exception:
+            pass
     if seller:
         try:
             from apps.sellers.models import Vendedor
@@ -128,7 +142,7 @@ def sales_summary(
     days = max(1, (date_to - date_from).days + 1)
     # For monthly goal prorate by days in calendar month of date_to
     month_days = monthrange(date_to.year, date_to.month)[1]
-    goal = _goal_month(seller=seller)
+    goal = _goal_month(seller=seller, year=date_to.year, month=date_to.month)
     # If range spans full month-ish use full goal else prorate
     if date_from.day == 1 and date_to.month == date_from.month:
         period_goal = (goal * Decimal(days) / Decimal(month_days)).quantize(Decimal("0.01"))
@@ -303,7 +317,7 @@ def timeseries(
         .order_by("bucket")
     )
     days = max(1, (date_to - date_from).days + 1)
-    goal = _goal_month(seller=seller)
+    goal = _goal_month(seller=seller, year=date_to.year, month=date_to.month)
     daily_expected = float(goal / Decimal(30))
     points = []
     running = []

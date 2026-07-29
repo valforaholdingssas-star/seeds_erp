@@ -14,6 +14,7 @@ import { PaginationBar } from "@/components/ui/PaginationBar";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { formatCOP, formatSaleDate } from "@/lib/utils";
 import { formatSaleItemLine } from "@/lib/kitTypes";
+import { sourceLabel } from "@/lib/saleSources";
 
 type Sale = {
   id: string;
@@ -158,7 +159,9 @@ export function SalesPage() {
       {
         accessorKey: "source",
         header: "Canal",
-        cell: ({ getValue }) => <Badge variant="dark">{String(getValue())}</Badge>,
+        cell: ({ getValue }) => (
+          <Badge variant="dark">{sourceLabel(String(getValue()))}</Badge>
+        ),
       },
       {
         accessorKey: "closed_at",
@@ -387,8 +390,8 @@ export function SalesPage() {
         <KanbanBoard
           columns={SOURCES.map((s) => ({
             id: s,
-            label: s,
-            badge: <Badge variant="dark">{s}</Badge>,
+            label: sourceLabel(s),
+            badge: <Badge variant="dark">{sourceLabel(s)}</Badge>,
           }))}
           items={kanbanItems}
           canDrop={() => false}

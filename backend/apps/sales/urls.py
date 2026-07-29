@@ -9,6 +9,7 @@ from apps.sales.views import (
     FeriaSaleCreateView,
     KommoWebhookView,
     ManualSaleCreateView,
+    SalesGoalsView,
     ShopifyResyncView,
     ShopifyWebhookView,
     WooCommerceWebhookView,
@@ -36,6 +37,7 @@ urlpatterns = [
         FailedEcommerceDetailView.as_view(),
         name="sales-failed-ecommerce-detail",
     ),
+    path("sales/goals/", SalesGoalsView.as_view(), name="sales-goals"),
     path(
         "webhooks/woocommerce/order-created/",
         WooCommerceWebhookView.as_view(),

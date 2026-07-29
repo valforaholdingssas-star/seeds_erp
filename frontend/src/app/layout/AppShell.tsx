@@ -10,6 +10,7 @@ import {
   Handshake,
   ShoppingBag,
   PhoneMissed,
+  Target,
   Truck,
   Package,
   Boxes,
@@ -110,6 +111,14 @@ const navGroups: NavGroup[] = [
         roles: ["ADMIN", "VENTAS", "SUPERVISOR", "VIEWER"],
         module: "sales",
         keywords: ["pendientes", "fallidos", "contactar", "woo", "shopify"],
+      },
+      {
+        to: "/sales/goals",
+        label: "Metas comerciales",
+        icon: Target,
+        roles: ["ADMIN", "VENTAS", "SUPERVISOR", "VIEWER"],
+        module: "sales",
+        keywords: ["metas", "objetivos", "kpi", "mes"],
       },
       {
         to: "/leads",

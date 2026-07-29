@@ -11,7 +11,7 @@ from apps.common.models import BaseModel
 
 class SaleSource(models.TextChoices):
     ECOMMERCE = "ECOMMERCE", "Ecommerce"
-    SHOPIFY = "SHOPIFY", "Shopify"
+    SHOPIFY = "SHOPIFY", "Ecommerce 2"
     KOMMO = "KOMMO", "Kommo"
     FERIAS = "FERIAS", "Ferias"
     MANUAL = "MANUAL", "Manual"

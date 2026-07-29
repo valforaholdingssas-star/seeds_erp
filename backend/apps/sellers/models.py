@@ -52,3 +52,33 @@ class Vendedor(BaseModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class SellerMonthlyGoal(BaseModel):
+    """Meta de ventas (COP) por comercial, año y mes."""
+
+    seller = models.ForeignKey(
+        Vendedor,
+        on_delete=models.CASCADE,
+        related_name="monthly_goals",
+    )
+    year = models.PositiveIntegerField(db_index=True)
+    month = models.PositiveSmallIntegerField(db_index=True)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ["seller__name", "year", "month"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["seller", "year", "month"],
+                name="uq_seller_monthly_goal",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["year", "month"]),
+        ]
+        verbose_name = "Meta mensual comercial"
+        verbose_name_plural = "Metas mensuales comerciales"
+
+    def __str__(self) -> str:
+        return f"{self.seller.name} {self.year}-{self.month:02d}: {self.amount}"
