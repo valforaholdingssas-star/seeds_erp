@@ -65,6 +65,8 @@ export function PayablesPage() {
   });
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [createProofFile, setCreateProofFile] = useState<File | null>(null);
+  const [createInvoiceFile, setCreateInvoiceFile] = useState<File | null>(null);
 
   const payables = useQuery({
     queryKey: ["expenses-payables"],
@@ -99,7 +101,7 @@ export function PayablesPage() {
       e.preventDefault();
       setError(null);
       setOkMsg(null);
-      await apiClient.post("/expenses/payables/", {
+      const { data } = await apiClient.post<Expense>("/expenses/payables/", {
         kind: createKind,
         title: form.title,
         amount: form.amount,
@@ -108,9 +110,24 @@ export function PayablesPage() {
         iva_discountable: form.iva_discountable || null,
         nature: "EMPRESA",
       });
+      for (const [kind, file] of [
+        ["PAYMENT_PROOF", createProofFile],
+        ["PROVIDER_INVOICE", createInvoiceFile],
+      ] as const) {
+        if (!file) continue;
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("kind", kind);
+        await apiClient.post(`/expenses/${data.id}/attachments/`, fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      }
+      return data;
     },
     onSuccess: () => {
       setForm((f) => ({ ...f, title: "", amount: "", concept: "", iva_discountable: "" }));
+      setCreateProofFile(null);
+      setCreateInvoiceFile(null);
       setOkMsg(
         createKind === "reembolso"
           ? "Reembolso registrado en la cola."
@@ -339,9 +356,31 @@ export function PayablesPage() {
               onChange={(e) => setForm({ ...form, expense_date: e.target.value })}
             />
           </div>
+          <div>
+            <FieldLabel>Factura proveedor</FieldLabel>
+            <Input
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(e) => setCreateInvoiceFile(e.target.files?.[0] || null)}
+            />
+            {createInvoiceFile ? (
+              <p className="mt-1 truncate text-xs text-text-muted">{createInvoiceFile.name}</p>
+            ) : null}
+          </div>
+          <div>
+            <FieldLabel>Comprobante de pago</FieldLabel>
+            <Input
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(e) => setCreateProofFile(e.target.files?.[0] || null)}
+            />
+            {createProofFile ? (
+              <p className="mt-1 truncate text-xs text-text-muted">{createProofFile.name}</p>
+            ) : null}
+          </div>
           <div className="flex items-end">
             <Button type="submit" disabled={createMut.isPending}>
-              Agregar a cola
+              {createMut.isPending ? "Guardando…" : "Agregar a cola"}
             </Button>
           </div>
         </form>

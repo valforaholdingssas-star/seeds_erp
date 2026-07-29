@@ -80,6 +80,8 @@ export function ExpensesPage() {
     amortization_months: "",
     iva_discountable: "",
   });
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
 
   const statuses = useQuery({
     queryKey: ["expense-statuses"],
@@ -164,7 +166,7 @@ export function ExpensesPage() {
         form.status ||
         statuses.data?.find((s) => s.key === "GASTOS_POR_REGISTRAR")?.id ||
         statuses.data?.[0]?.id;
-      await apiClient.post("/expenses/", {
+      const { data } = await apiClient.post<Expense>("/expenses/", {
         title: form.title,
         concept: form.title,
         amount: form.amount,
@@ -181,8 +183,21 @@ export function ExpensesPage() {
             : null,
         iva_discountable: form.iva_discountable || null,
       });
+      for (const [kind, file] of [
+        ["PAYMENT_PROOF", proofFile],
+        ["PROVIDER_INVOICE", invoiceFile],
+      ] as const) {
+        if (!file) continue;
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("kind", kind);
+        await apiClient.post(`/expenses/${data.id}/attachments/`, fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      }
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, _vars, _ctx) => {
       const wasNominal = form.nature === "NOMINAL";
       setForm((f) => ({
         ...f,
@@ -192,6 +207,8 @@ export function ExpensesPage() {
         on_behalf_of: "",
         nature: "EMPRESA",
       }));
+      setProofFile(null);
+      setInvoiceFile(null);
       void qc.invalidateQueries({ queryKey: ["expenses"] });
       void qc.invalidateQueries({ queryKey: ["expenses-nominal"] });
       if (wasNominal) {
@@ -528,9 +545,31 @@ export function ExpensesPage() {
               Al guardar se enviará al módulo de gastos nominales (sin EFE).
             </p>
           )}
+          <div>
+            <FieldLabel>Factura proveedor</FieldLabel>
+            <Input
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(e) => setInvoiceFile(e.target.files?.[0] || null)}
+            />
+            {invoiceFile ? (
+              <p className="mt-1 truncate text-xs text-text-muted">{invoiceFile.name}</p>
+            ) : null}
+          </div>
+          <div>
+            <FieldLabel>Comprobante de pago</FieldLabel>
+            <Input
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+            />
+            {proofFile ? (
+              <p className="mt-1 truncate text-xs text-text-muted">{proofFile.name}</p>
+            ) : null}
+          </div>
           <div className="flex items-end">
             <Button type="submit" disabled={createMut.isPending}>
-              Crear gasto
+              {createMut.isPending ? "Guardando…" : "Crear gasto"}
             </Button>
           </div>
         </form>
