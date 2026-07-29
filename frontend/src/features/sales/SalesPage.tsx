@@ -341,6 +341,12 @@ export function SalesPage() {
               Resync Woo
             </Link>
             <Link
+              to="/sales/failed-ecommerce"
+              className="inline-flex min-h-7 items-center justify-center rounded-[999px] border border-line px-3 text-[10px] label-caps text-green-900 hover:bg-cream-100"
+            >
+              Fallidos
+            </Link>
+            <Link
               to="/sales/import"
               className="inline-flex min-h-7 items-center justify-center rounded-[999px] border border-line px-3 text-[10px] label-caps text-green-900 hover:bg-cream-100"
             >

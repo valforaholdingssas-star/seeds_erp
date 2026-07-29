@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import models
 from django.db.models import Q, UniqueConstraint
 
@@ -70,6 +71,25 @@ class PaymentMethod(BaseModel):
 VALID_CONSOLIDATION_STATUSES = frozenset({"processing", "completed"})
 WITHDRAW_STATUSES = frozenset({"cancelled", "failed", "refunded", "error"})
 
+# Pedidos ecommerce que no llegaron a consolidado y requieren seguimiento comercial.
+FAILED_ECOMMERCE_STATUSES = frozenset(
+    {
+        "pending",
+        "failed",
+        "cancelled",
+        "on-hold",
+        "checkout-draft",
+        "error",
+    }
+)
+
+
+class FollowUpStatus(models.TextChoices):
+    POR_CONTACTAR = "POR_CONTACTAR", "Por contactar"
+    CONTACTADO = "CONTACTADO", "Contactado"
+    EN_SEGUIMIENTO = "EN_SEGUIMIENTO", "En seguimiento"
+    CERRADO = "CERRADO", "Cerrado"
+
 
 class SourceSaleBase(BaseModel):
     external_id = models.CharField(max_length=64, db_index=True)
@@ -129,6 +149,22 @@ class SourceSaleBase(BaseModel):
         db_index=True,
         help_text="ENVIA → guías Envia. DOMICILIO/OFICINA → no generan guía.",
     )
+    follow_up_status = models.CharField(
+        max_length=24,
+        choices=FollowUpStatus.choices,
+        default=FollowUpStatus.POR_CONTACTAR,
+        db_index=True,
+        help_text="Seguimiento comercial de pedidos no consolidados (fallidos/pendientes).",
+    )
+    contacted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    contacted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="%(class)s_contacts",
+    )
+    follow_up_notes = models.TextField(blank=True)
 
     class Meta:
         abstract = True

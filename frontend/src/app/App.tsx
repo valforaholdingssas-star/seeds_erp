@@ -48,6 +48,7 @@ import { AnalyticsPage } from "@/features/analytics/AnalyticsPage";
 import { SalesImportPage } from "@/features/sales/SalesImportPage";
 import { SalesResyncPage } from "@/features/sales/SalesResyncPage";
 import { PackRulesPage } from "@/features/sales/PackRulesPage";
+import { FailedEcommercePage } from "@/features/sales/FailedEcommercePage";
 import { FailedEventsPage } from "@/features/integrations/FailedEventsPage";
 
 const queryClient = new QueryClient({
@@ -77,6 +78,7 @@ export function App() {
                 <Route path="sales/manual" element={<InternalSaleFormPage mode="manual" />} />
                 <Route path="sales/import" element={<SalesImportPage />} />
                 <Route path="sales/resync" element={<SalesResyncPage />} />
+                <Route path="sales/failed-ecommerce" element={<FailedEcommercePage />} />
                 <Route path="sales/:id" element={<SaleDetailPage />} />
                 <Route path="leads" element={<LeadsPage />} />
                 <Route path="ai" element={<AiPage />} />

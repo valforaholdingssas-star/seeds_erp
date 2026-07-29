@@ -9,6 +9,7 @@ import {
   Leaf,
   Handshake,
   ShoppingBag,
+  PhoneMissed,
   Truck,
   Package,
   Boxes,
@@ -101,6 +102,14 @@ const navGroups: NavGroup[] = [
         roles: ALL_ROLES,
         module: "sales",
         keywords: ["consolidado", "pedidos", "woo", "kommo"],
+      },
+      {
+        to: "/sales/failed-ecommerce",
+        label: "Ecommerce fallidos",
+        icon: PhoneMissed,
+        roles: ["ADMIN", "VENTAS", "SUPERVISOR", "VIEWER"],
+        module: "sales",
+        keywords: ["pendientes", "fallidos", "contactar", "woo", "shopify"],
       },
       {
         to: "/leads",

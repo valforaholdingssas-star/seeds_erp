@@ -21,7 +21,9 @@ from apps.sales.serializers import (
 from apps.sales.services.csv_import import commit_csv, commit_xlsx, dry_run_csv, dry_run_xlsx
 from apps.sales.services.internal_forms import create_feria_sale, create_manual_sale
 from apps.sales.services.normalization import calc_fiscal, guide_cost_for_sale, withdraw_from_consolidated
+from apps.sales.services.failed_ecommerce import list_failed_ecommerce, update_follow_up
 from apps.sales.services.resync import start_shopify_resync, start_woo_resync
+from apps.sales.models import FollowUpStatus
 from apps.sales.tasks import (
     enqueue_shopify_resync,
     enqueue_woo_resync,
@@ -397,6 +399,74 @@ class ShopifyResyncView(APIView):
         if batch.total > 0 and batch.status != "COMPLETED":
             enqueue_shopify_resync.delay(str(batch.id))
         return Response(BatchJobSerializer(batch).data, status=status.HTTP_201_CREATED)
+
+
+class FailedEcommerceListView(APIView):
+    """
+    Pedidos Woo/Shopify que no consolidaron (pending/failed/cancelled/…)
+    para seguimiento comercial diario.
+    """
+
+    permission_module = "sales"
+    module_roles = ["VENTAS", "SUPERVISOR", "VIEWER"]
+    permission_classes = [IsModuleRole]
+
+    def get(self, request):
+        rows = list_failed_ecommerce(
+            channel=(request.query_params.get("channel") or "").strip().upper() or None,
+            follow_up_status=(request.query_params.get("follow_up_status") or "").strip()
+            or None,
+            order_status=(request.query_params.get("status") or "").strip() or None,
+            search=(request.query_params.get("search") or "").strip() or None,
+            contacted=(request.query_params.get("contacted") or "").strip() or None,
+        )
+        counts = {
+            "total": len(rows),
+            "por_contactar": sum(
+                1 for r in rows if r["follow_up_status"] == FollowUpStatus.POR_CONTACTAR
+            ),
+            "contactados": sum(1 for r in rows if r.get("contacted_at")),
+        }
+        return Response({"count": len(rows), "counts": counts, "results": rows})
+
+
+class FailedEcommerceDetailView(APIView):
+    permission_module = "sales"
+    permission_crud = "u"
+    module_roles = ["VENTAS", "SUPERVISOR"]
+    permission_classes = [IsModuleRole]
+
+    def patch(self, request, pk):
+        channel = (
+            (request.data.get("channel") or request.query_params.get("channel") or "")
+            .strip()
+            .upper()
+        )
+        if channel not in {"ECOMMERCE", "SHOPIFY"}:
+            return Response(
+                {"detail": "channel es obligatorio (ECOMMERCE|SHOPIFY)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        mark = request.data.get("mark_contacted")
+        mark_contacted = str(mark).lower() in {"1", "true", "yes"} if mark is not None else False
+        try:
+            row = update_follow_up(
+                channel=channel,
+                pk=str(pk),
+                actor=request.user,
+                follow_up_status=(request.data.get("follow_up_status") or None),
+                follow_up_notes=(
+                    request.data.get("follow_up_notes")
+                    if "follow_up_notes" in request.data
+                    else None
+                ),
+                mark_contacted=mark_contacted,
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except LookupError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        return Response(row)
 
 
 class KommoWebhookView(APIView):

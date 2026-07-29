@@ -4,6 +4,8 @@ from rest_framework.routers import DefaultRouter
 from apps.sales.views import (
     ConsolidatedSaleViewSet,
     EcommerceResyncView,
+    FailedEcommerceDetailView,
+    FailedEcommerceListView,
     FeriaSaleCreateView,
     KommoWebhookView,
     ManualSaleCreateView,
@@ -24,6 +26,16 @@ urlpatterns = [
     path("sales/manual/", ManualSaleCreateView.as_view(), name="sales-manual"),
     path("sales/ecommerce/resync/", EcommerceResyncView.as_view(), name="sales-woo-resync"),
     path("sales/shopify/resync/", ShopifyResyncView.as_view(), name="sales-shopify-resync"),
+    path(
+        "sales/failed-ecommerce/",
+        FailedEcommerceListView.as_view(),
+        name="sales-failed-ecommerce",
+    ),
+    path(
+        "sales/failed-ecommerce/<uuid:pk>/",
+        FailedEcommerceDetailView.as_view(),
+        name="sales-failed-ecommerce-detail",
+    ),
     path(
         "webhooks/woocommerce/order-created/",
         WooCommerceWebhookView.as_view(),
