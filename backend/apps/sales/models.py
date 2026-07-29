@@ -10,6 +10,7 @@ from apps.common.models import BaseModel
 
 class SaleSource(models.TextChoices):
     ECOMMERCE = "ECOMMERCE", "Ecommerce"
+    SHOPIFY = "SHOPIFY", "Shopify"
     KOMMO = "KOMMO", "Kommo"
     FERIAS = "FERIAS", "Ferias"
     MANUAL = "MANUAL", "Manual"
@@ -137,6 +138,16 @@ class EcommerceSale(SourceSaleBase):
     class Meta:
         constraints = [
             UniqueConstraint(fields=["external_id"], name="uq_ecommerce_external_id"),
+        ]
+        indexes = [models.Index(fields=["status", "closed_at"])]
+
+
+class ShopifySale(SourceSaleBase):
+    """Canal Shopify en paralelo a WooCommerce (EcommerceSale)."""
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["external_id"], name="uq_shopify_external_id"),
         ]
         indexes = [models.Index(fields=["status", "closed_at"])]
 

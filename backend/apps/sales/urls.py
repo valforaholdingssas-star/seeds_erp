@@ -7,6 +7,8 @@ from apps.sales.views import (
     FeriaSaleCreateView,
     KommoWebhookView,
     ManualSaleCreateView,
+    ShopifyResyncView,
+    ShopifyWebhookView,
     WooCommerceWebhookView,
 )
 from apps.sales.payment_views import PaymentMethodViewSet
@@ -21,6 +23,7 @@ urlpatterns = [
     path("sales/ferias/", FeriaSaleCreateView.as_view(), name="sales-ferias"),
     path("sales/manual/", ManualSaleCreateView.as_view(), name="sales-manual"),
     path("sales/ecommerce/resync/", EcommerceResyncView.as_view(), name="sales-woo-resync"),
+    path("sales/shopify/resync/", ShopifyResyncView.as_view(), name="sales-shopify-resync"),
     path(
         "webhooks/woocommerce/order-created/",
         WooCommerceWebhookView.as_view(),
@@ -32,6 +35,11 @@ urlpatterns = [
         WooCommerceWebhookView.as_view(),
         {"event": "updated"},
         name="webhook-woo-updated",
+    ),
+    path(
+        "webhooks/shopify/orders/",
+        ShopifyWebhookView.as_view(),
+        name="webhook-shopify-orders",
     ),
     path(
         "webhooks/kommo/lead-status-changed/",

@@ -87,6 +87,12 @@ class ConfigTestView(APIView):
             result = ping_woocommerce()
             return Response(result, status=200)
 
+        if group == "SHOPIFY":
+            from apps.sales.services.shopify_client import ping_shopify
+
+            result = ping_shopify()
+            return Response(result, status=200)
+
         if group == "KOMMO":
             from apps.sales.services.kommo_client import ping_kommo
 

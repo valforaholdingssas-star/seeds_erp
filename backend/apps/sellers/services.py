@@ -8,6 +8,7 @@ from apps.sellers.models import Vendedor
 
 SYSTEM_VENDORS = (
     ("ECOMMERCE", True),
+    ("SHOPIFY", True),
     ("FERIAS", True),
 )
 

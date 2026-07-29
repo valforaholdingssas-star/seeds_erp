@@ -257,6 +257,56 @@ SETTINGS: list[Setting] = [
         default="billing_cedula",
         help="Key en meta_data del pedido — nunca usar índice fijo.",
     ),
+    # Shopify (ecommerce adicional en paralelo a Woo)
+    Setting(
+        key="shopify.shop_domain",
+        label="Dominio de la tienda",
+        group="SHOPIFY",
+        type=SettingType.STRING,
+        help="Ej. seeds-store.myshopify.com (sin https://).",
+    ),
+    Setting(
+        key="shopify.admin_access_token",
+        label="Admin API access token",
+        group="SHOPIFY",
+        type=SettingType.SECRET,
+        help="Token de la app custom (shpat_…). Necesario para resync/ping.",
+    ),
+    Setting(
+        key="shopify.api_secret",
+        label="API secret / webhook HMAC",
+        group="SHOPIFY",
+        type=SettingType.SECRET,
+        help=(
+            "Client secret de la app. Firma X-Shopify-Hmac-SHA256 (base64). "
+            "Webhook HTTPS: /api/v1/webhooks/shopify/orders/ "
+            "(topics: orders/create, orders/updated, orders/paid, orders/cancelled)."
+        ),
+    ),
+    Setting(
+        key="shopify.require_signature",
+        label="Exigir firma HMAC",
+        group="SHOPIFY",
+        type=SettingType.BOOL,
+        default=True,
+        help="Si es falso, permite webhooks sin secreto (solo local/dev).",
+    ),
+    Setting(
+        key="shopify.api_version",
+        label="Versión Admin API",
+        group="SHOPIFY",
+        type=SettingType.STRING,
+        default="2025-01",
+        help="Ej. 2025-01. Debe coincidir con la app / webhooks.",
+    ),
+    Setting(
+        key="shopify.id_note_attribute",
+        label="Atributo de cédula (note_attributes)",
+        group="SHOPIFY",
+        type=SettingType.STRING,
+        default="cedula",
+        help="name en note_attributes del pedido. Fallbacks: CC, documento, billing_cedula.",
+    ),
     # Kommo
     Setting(
         key="kommo.subdomain",

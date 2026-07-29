@@ -162,6 +162,95 @@ def extract_woo_id_number(meta_data: list[dict] | None, meta_key: str | None = N
     return ""
 
 
+def parse_shopify_line_items(line_items: list[dict] | None) -> tuple[list[dict[str, Any]], int, int]:
+    """
+    Dorados/Plateados from Shopify line items.
+    Color from variant_title / title / properties (dorado|plateado).
+    Pack multiplier reuses ProductPackRule (product_id or name_contains).
+    """
+    items: list[dict[str, Any]] = []
+    qty_d = 0
+    qty_p = 0
+    for item in line_items or []:
+        qty = int(item.get("quantity") or 0)
+        product_id = str(item.get("product_id") or item.get("variant_id") or "")
+        name = str(item.get("name") or item.get("title") or "")
+        variant_title = str(item.get("variant_title") or "")
+        mult = pack_multiplier(product_id, name)
+        unidades = qty * mult
+
+        color_raw = f"{variant_title} {name}".lower()
+        for prop in item.get("properties") or []:
+            pname = str(prop.get("name") or "").lower()
+            pval = str(prop.get("value") or "").lower()
+            if "color" in pname or "colour" in pname or pname in {"pa_color", "option1"}:
+                color_raw = f"{color_raw} {pval}"
+            else:
+                color_raw = f"{color_raw} {pname} {pval}"
+
+        if "plateado" in color_raw or "silver" in color_raw:
+            color = SaleColor.PLATEADO
+            qty_p += unidades
+        elif "dorado" in color_raw or "gold" in color_raw:
+            color = SaleColor.DORADO
+            qty_d += unidades
+        else:
+            color = SaleColor.DORADO
+            qty_d += unidades
+
+        items.append(
+            {
+                "color": color,
+                "tipo": infer_kit_type_from_name(name),
+                "quantity": unidades,
+                "woo_product_id": product_id,
+                "product_name": name,
+            }
+        )
+    return items, qty_d, qty_p
+
+
+def extract_shopify_id_number(
+    note_attributes: list[dict] | None = None,
+    *,
+    note: str = "",
+    metafields: list[dict] | None = None,
+    attr_name: str | None = None,
+) -> str:
+    """Cédula from note_attributes / metafields — never by fixed index."""
+    key = (
+        attr_name
+        or cfg.get("shopify.id_note_attribute", "cedula")
+        or "cedula"
+    )
+    key_l = str(key).lower()
+    candidates = [key_l, "cedula", "cc", "documento", "document", "billing_cedula", "id_number"]
+
+    for attr in note_attributes or []:
+        name = str(attr.get("name") or attr.get("key") or "").lower()
+        if name in candidates or name == key_l:
+            val = str(attr.get("value") or "").strip()
+            if val:
+                return val
+
+    for meta in metafields or []:
+        mkey = str(meta.get("key") or "").lower()
+        if mkey in candidates or mkey == key_l:
+            val = str(meta.get("value") or "").strip()
+            if val:
+                return val
+
+    # Last resort: "cedula: 123" in order note
+    note_l = (note or "").lower()
+    for token in ("cedula", "cc", "documento"):
+        if token in note_l:
+            for part in (note or "").replace("\n", " ").split():
+                digits = "".join(ch for ch in part if ch.isdigit())
+                if len(digits) >= 6:
+                    return digits
+    return ""
+
+
 @transaction.atomic
 def promote_to_consolidated(
     source_sale: SourceSaleBase,
@@ -176,6 +265,8 @@ def promote_to_consolidated(
     seller = None
     if source == SaleSource.ECOMMERCE:
         seller = resolve_vendedor("ECOMMERCE", create_if_missing=True, actor=actor)
+    elif source == SaleSource.SHOPIFY:
+        seller = resolve_vendedor("SHOPIFY", create_if_missing=True, actor=actor)
     elif source == SaleSource.FERIAS:
         seller = resolve_vendedor(
             source_sale.commercial_raw or "FERIAS",

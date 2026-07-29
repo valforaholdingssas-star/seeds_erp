@@ -170,7 +170,8 @@ export function AnalyticsPage() {
             onChange={(e) => setSource(e.target.value)}
           >
             <option value="">Todos</option>
-            <option value="ECOMMERCE">Ecommerce</option>
+            <option value="ECOMMERCE">Ecommerce (Woo)</option>
+            <option value="SHOPIFY">Shopify</option>
             <option value="KOMMO">Kommo</option>
             <option value="FERIAS">Ferias</option>
             <option value="MANUAL">Manual</option>

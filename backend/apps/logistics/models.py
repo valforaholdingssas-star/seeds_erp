@@ -23,6 +23,7 @@ class BatchJobType(models.TextChoices):
     MARK_SENT = "MARK_SENT", "Marcar enviados"
     ISSUE_INVOICES = "ISSUE_INVOICES", "Emitir facturas"
     WOO_RESYNC = "WOO_RESYNC", "Resync WooCommerce"
+    SHOPIFY_RESYNC = "SHOPIFY_RESYNC", "Resync Shopify"
     SYNC_CUSTOMERS = "SYNC_CUSTOMERS", "Sincronizar clientes Alegra"
 
 

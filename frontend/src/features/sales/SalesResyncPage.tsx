@@ -9,10 +9,13 @@ import { Card } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 
+type Channel = "woo" | "shopify";
+
 export function SalesResyncPage() {
   const openBatch = useBatchConsole((s) => s.openBatch);
   const today = new Date().toISOString().slice(0, 10);
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const [channel, setChannel] = useState<Channel>("woo");
   const [after, setAfter] = useState(weekAgo);
   const [before, setBefore] = useState(today);
   const [status, setStatus] = useState("");
@@ -21,34 +24,50 @@ export function SalesResyncPage() {
 
   const resync = useMutation({
     mutationFn: async () => {
+      const path =
+        channel === "shopify" ? "/sales/shopify/resync/" : "/sales/ecommerce/resync/";
+      const body =
+        channel === "shopify"
+          ? {
+              after,
+              before,
+              financial_status: status || undefined,
+            }
+          : {
+              after,
+              before,
+              status: status || undefined,
+            };
       const { data } = await apiClient.post<{
         id: string;
         total: number;
         status: string;
-      }>("/sales/ecommerce/resync/", {
-        after,
-        before,
-        status: status || undefined,
-      });
+      }>(path, body);
       return data;
     },
     onSuccess: (data) => {
       setError(null);
+      const label = channel === "shopify" ? "Shopify" : "WooCommerce";
       setMsg(
         data.total === 0
-          ? "Sin órdenes en el rango (o WooCommerce sin credenciales)."
-          : `Resync iniciado: ${data.total} órdenes.`,
+          ? `Sin órdenes en el rango (o ${label} sin credenciales).`
+          : `Resync ${label} iniciado: ${data.total} órdenes.`,
       );
       if (data.total > 0) void openBatch(data.id);
     },
-    onError: () => setError("No se pudo iniciar el resync. Revisa credenciales Woo."),
+    onError: () =>
+      setError(
+        channel === "shopify"
+          ? "No se pudo iniciar el resync. Revisa credenciales Shopify."
+          : "No se pudo iniciar el resync. Revisa credenciales Woo.",
+      ),
   });
 
   return (
     <div className="space-y-3">
       <PageHeader
         eyebrow="Ventas"
-        title="Resync WooCommerce"
+        title="Resync ecommerce"
         actions={
           <>
             <Link
@@ -65,6 +84,34 @@ export function SalesResyncPage() {
       {msg && <Alert variant="info">{msg}</Alert>}
 
       <Card tone="cream" className="max-w-xl space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={channel === "woo" ? "primary-dark" : "ghost"}
+            onClick={() => {
+              setChannel("woo");
+              setStatus("");
+              setMsg(null);
+              setError(null);
+            }}
+          >
+            WooCommerce
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={channel === "shopify" ? "primary-dark" : "ghost"}
+            onClick={() => {
+              setChannel("shopify");
+              setStatus("");
+              setMsg(null);
+              setError(null);
+            }}
+          >
+            Shopify
+          </Button>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel>Desde</FieldLabel>
@@ -76,11 +123,19 @@ export function SalesResyncPage() {
           </div>
         </div>
         <div>
-          <FieldLabel>Estado Woo (opcional)</FieldLabel>
+          <FieldLabel>
+            {channel === "shopify"
+              ? "Estado financiero (opcional)"
+              : "Estado Woo (opcional)"}
+          </FieldLabel>
           <Input
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            placeholder="processing,completed,…"
+            placeholder={
+              channel === "shopify"
+                ? "paid,pending,refunded,…"
+                : "processing,completed,…"
+            }
           />
         </div>
         <Button type="button" disabled={resync.isPending} onClick={() => resync.mutate()}>

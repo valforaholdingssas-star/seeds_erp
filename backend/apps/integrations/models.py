@@ -5,6 +5,7 @@ from apps.common.models import BaseModel
 
 class IntegrationSource(models.TextChoices):
     WOOCOMMERCE = "WOOCOMMERCE", "WooCommerce"
+    SHOPIFY = "SHOPIFY", "Shopify"
     KOMMO = "KOMMO", "Kommo"
     ENVIA = "ENVIA", "Envia"
     ALEGRA = "ALEGRA", "Alegra"

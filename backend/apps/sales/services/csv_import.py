@@ -14,7 +14,14 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from apps.audit.services import log_audit_event
-from apps.sales.models import EcommerceSale, FeriaSale, KommoSale, ManualSale, SaleSource
+from apps.sales.models import (
+    EcommerceSale,
+    FeriaSale,
+    KommoSale,
+    ManualSale,
+    SaleSource,
+    ShopifySale,
+)
 from apps.sales.services.normalization import promote_to_consolidated
 from apps.sales.services.payment_methods import resolve_payment_method
 from apps.sales.services.fulfillment import apply_fulfillment, normalize_fulfillment_type
@@ -152,6 +159,7 @@ HEADER_ALIASES: dict[str, str] = {
 
 SOURCE_MODELS = {
     SaleSource.ECOMMERCE: EcommerceSale,
+    SaleSource.SHOPIFY: ShopifySale,
     SaleSource.KOMMO: KommoSale,
     SaleSource.FERIAS: FeriaSale,
     SaleSource.MANUAL: ManualSale,
@@ -297,6 +305,7 @@ def _normalize_source(raw: str | None) -> str:
         "ECOMMERCE": SaleSource.ECOMMERCE,
         "WOO": SaleSource.ECOMMERCE,
         "WOOCOMMERCE": SaleSource.ECOMMERCE,
+        "SHOPIFY": SaleSource.SHOPIFY,
         "KOMMO": SaleSource.KOMMO,
         "FERIA": SaleSource.FERIAS,
         "FERIAS": SaleSource.FERIAS,
@@ -417,6 +426,8 @@ def validate_row(row: dict[str, Any], mapping: dict[str, str | None], row_num: i
         commercial_raw = "FERIAS"
     if source == SaleSource.ECOMMERCE and not commercial_raw:
         commercial_raw = "ECOMMERCE"
+    if source == SaleSource.SHOPIFY and not commercial_raw:
+        commercial_raw = "SHOPIFY"
 
     status = (get("status") or "completed").lower()
     if status not in {"processing", "completed", "cancelled", "failed", "refunded", "pending"}:

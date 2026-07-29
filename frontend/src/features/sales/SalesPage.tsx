@@ -38,7 +38,7 @@ type Sale = {
 type Paginated<T> = { count: number; next: string | null; previous: string | null; results: T[] };
 type PayMethod = { id: string; name: string };
 
-const SOURCES = ["ECOMMERCE", "KOMMO", "FERIAS", "MANUAL"];
+const SOURCES = ["ECOMMERCE", "SHOPIFY", "KOMMO", "FERIAS", "MANUAL"];
 
 const FULFILLMENT_OPTIONS = [
   { value: "ENVIA", label: "Envia" },
@@ -484,7 +484,7 @@ export function SalesPage() {
             </>
           }
           emptyTitle="Sin ventas activas"
-          emptyDescription="Crea una venta de feria o manual, o espera un webhook de Woo/Kommo."
+          emptyDescription="Crea una venta de feria o manual, o espera un webhook de Woo/Shopify/Kommo."
         />
       )}
     </div>

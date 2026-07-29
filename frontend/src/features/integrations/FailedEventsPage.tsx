@@ -90,7 +90,7 @@ export function FailedEventsPage() {
         columns={columns}
         searchableKeys={["source", "event_type", "error"]}
         columnFilters={[
-          { key: "source", label: "Fuente", type: "select", options: ["WOOCOMMERCE", "KOMMO"] },
+          { key: "source", label: "Fuente", type: "select", options: ["WOOCOMMERCE", "SHOPIFY", "KOMMO"] },
         ]}
         emptyTitle="Sin fallos"
         emptyDescription="Los webhooks fallidos aparecen aquí para recovery."

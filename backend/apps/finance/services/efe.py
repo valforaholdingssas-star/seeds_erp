@@ -70,7 +70,7 @@ def sale_efe_code(sale: ConsolidatedSale, *, shipping: bool = False) -> str | No
     src = sale.source
     if src == SaleSource.FERIAS:
         return "1.1.3"
-    if src == SaleSource.ECOMMERCE:
+    if src in {SaleSource.ECOMMERCE, SaleSource.SHOPIFY}:
         return "1.1.2.1" if is_mrr else "1.1.1.1"
     if src == SaleSource.KOMMO:
         return "1.1.2.2" if is_mrr else "1.1.1.2"

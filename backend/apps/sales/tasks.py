@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import logging
@@ -16,6 +17,7 @@ from apps.sales.services.kommo_client import (
     kommo_configured,
     mark_lead_registered_in_erp,
 )
+from apps.sales.services.shopify import upsert_shopify_from_payload
 from apps.sales.services.woocommerce import upsert_ecommerce_from_payload
 
 logger = logging.getLogger(__name__)
@@ -57,6 +59,21 @@ def verify_woo_signature(raw_body: bytes, signature: str) -> bool:
     return hmac.compare_digest(digest, signature or "")
 
 
+def verify_shopify_signature(raw_body: bytes, signature: str) -> bool:
+    """
+    Shopify HMAC: base64(HMAC-SHA256(raw_body, api_secret)).
+    Header: X-Shopify-Hmac-SHA256
+    Docs: https://shopify.dev/docs/apps/build/webhooks/subscribe/https
+    """
+    secret = cfg.get_secret("shopify.api_secret") or ""
+    if not secret:
+        return not cfg.get_bool("shopify.require_signature", True)
+    digest = base64.b64encode(
+        hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).digest()
+    ).decode("utf-8")
+    return hmac.compare_digest(digest, signature or "")
+
+
 @shared_task(bind=True, max_retries=5, default_retry_delay=30)
 def process_raw_event(self, event_id: str):
     event = RawWebhookEvent.objects.filter(id=event_id).first()
@@ -65,6 +82,8 @@ def process_raw_event(self, event_id: str):
     try:
         if event.source == IntegrationSource.WOOCOMMERCE:
             upsert_ecommerce_from_payload(event.payload, raw_event=event)
+        elif event.source == IntegrationSource.SHOPIFY:
+            upsert_shopify_from_payload(event.payload, raw_event=event)
         elif event.source == IntegrationSource.KOMMO:
             # Guard early on webhook status_id / pipeline_id (before enrich)
             won_status = str(cfg.get("kommo.won_status_id") or "")
@@ -200,3 +219,54 @@ def enqueue_woo_resync(batch_id: str):
         "id", flat=True
     ):
         run_woo_resync_item(str(batch_id), str(item_id))
+
+
+@shared_task
+def run_shopify_resync_item(batch_id: str, item_id: str):
+    from django.db import transaction
+
+    from apps.logistics.models import BatchItemStatus, BatchJob, BatchJobStatus
+    from apps.sales.services.resync import process_shopify_resync_item
+
+    with transaction.atomic():
+        batch = BatchJob.objects.select_for_update().get(id=batch_id)
+        item = batch.items.select_for_update().get(id=item_id)
+        if item.status not in {BatchItemStatus.PENDING, BatchItemStatus.FAILED}:
+            return
+        item.status = BatchItemStatus.RUNNING
+        item.save(update_fields=["status", "updated_at"])
+        batch.status = BatchJobStatus.RUNNING
+        batch.save(update_fields=["status", "updated_at"])
+
+    try:
+        result = process_shopify_resync_item(order_id=item.ref_id)
+        item.status = BatchItemStatus.SUCCESS
+        item.result = result
+        item.error = ""
+    except Exception as exc:
+        item.status = BatchItemStatus.FAILED
+        item.error = str(exc)[:2000]
+        item.result = {}
+    item.save(update_fields=["status", "result", "error", "updated_at"])
+
+    with transaction.atomic():
+        batch = BatchJob.objects.select_for_update().get(id=batch_id)
+        batch.done = batch.items.exclude(status=BatchItemStatus.PENDING).exclude(
+            status=BatchItemStatus.RUNNING
+        ).count()
+        batch.success = batch.items.filter(status=BatchItemStatus.SUCCESS).count()
+        batch.failed = batch.items.filter(status=BatchItemStatus.FAILED).count()
+        if batch.done >= batch.total:
+            batch.status = BatchJobStatus.COMPLETED
+        batch.save(update_fields=["done", "success", "failed", "status", "updated_at"])
+
+
+@shared_task
+def enqueue_shopify_resync(batch_id: str):
+    from apps.logistics.models import BatchItemStatus, BatchJob
+
+    batch = BatchJob.objects.get(id=batch_id)
+    for item_id in batch.items.filter(status=BatchItemStatus.PENDING).order_by("created_at").values_list(
+        "id", flat=True
+    ):
+        run_shopify_resync_item(str(batch_id), str(item_id))
