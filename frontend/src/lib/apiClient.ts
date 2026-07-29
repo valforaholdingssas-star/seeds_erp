@@ -2,13 +2,13 @@ import axios from "axios";
 import { useAuthStore } from "@/features/auth/store";
 
 /** Empty string = same-origin (nginx proxies /api). Dev default = localhost API. */
-const raw = import.meta.env.VITE_API_URL as string | undefined;
-const API_URL =
-  raw !== undefined && raw !== ""
-    ? raw.replace(/\/$/, "")
-    : import.meta.env.PROD
-      ? ""
-      : "http://localhost:8000";
+const raw = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+// Never bake a localhost API into production bundles (breaks Comercial behind nginx).
+const API_URL = import.meta.env.PROD
+  ? (raw && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(raw)
+      ? raw.replace(/\/$/, "")
+      : "")
+  : (raw || "http://localhost:8000").replace(/\/$/, "");
 
 export const apiClient = axios.create({
   baseURL: `${API_URL}/api/v1`,
