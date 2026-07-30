@@ -24,6 +24,23 @@ type SettingItem = {
 
 type TestResult = { ok: boolean; message: string; mode?: string };
 
+type WebhookUrl = {
+  provider: string;
+  topic: string;
+  url: string;
+  where: string;
+};
+
+type SyncResult = {
+  ok: boolean;
+  message: string;
+  public_base_url: string;
+  shopify?: { message?: string; created?: string[]; existing?: string[]; errors?: string[] };
+  woocommerce?: { message?: string; updated?: unknown[]; errors?: string[] };
+  manual?: Array<{ provider: string; action: string; url: string }>;
+  webhook_urls?: WebhookUrl[];
+};
+
 const GROUP_ORDER = ["ENVIA", "ALEGRA", "WOOCOMMERCE", "SHOPIFY", "KOMMO", "AI", "BIGQUERY", "FINANZAS", "BUSINESS"];
 
 export function SettingsPage() {
@@ -31,13 +48,17 @@ export function SettingsPage() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [testModes, setTestModes] = useState<Record<string, TestResult>>({});
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
 
   const config = useQuery({
     queryKey: ["config"],
     queryFn: async () => {
-      const { data } = await apiClient.get<{ groups: string[]; settings: SettingItem[] }>(
-        "/config/",
-      );
+      const { data } = await apiClient.get<{
+        groups: string[];
+        settings: SettingItem[];
+        public_base_url?: string;
+        webhook_urls?: WebhookUrl[];
+      }>("/config/");
       return data;
     },
   });
@@ -96,6 +117,19 @@ export function SettingsPage() {
     },
   });
 
+  const syncInbound = useMutation({
+    mutationFn: async () => {
+      const { data } = await apiClient.post<SyncResult>("/config/sync-inbound-urls/");
+      return data;
+    },
+    onSuccess: (data) => {
+      setSyncResult(data);
+      setMessage(data.message);
+      qc.invalidateQueries({ queryKey: ["config"] });
+    },
+    onError: () => setMessage("No se pudo sincronizar webhooks al dominio público."),
+  });
+
   const byGroup = useMemo(() => {
     const map: Record<string, SettingItem[]> = {};
     for (const s of config.data?.settings || []) {
@@ -105,6 +139,9 @@ export function SettingsPage() {
     return map;
   }, [config.data]);
 
+  const webhookUrls = syncResult?.webhook_urls || config.data?.webhook_urls || [];
+  const publicBase = syncResult?.public_base_url || config.data?.public_base_url || "";
+
   return (
     <div className="space-y-3">
       <PageHeader eyebrow="Configuración" title="Integraciones y parámetros" />
@@ -112,6 +149,66 @@ export function SettingsPage() {
       <MockModeBanner />
 
       {message ? <Alert variant="info">{message}</Alert> : null}
+
+      <Card>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-serif text-2xl text-green-900">URL pública y webhooks</h2>
+            <p className="mt-1 text-sm text-text-muted">
+              Dominio HTTPS del ERP. Migra Woo/Shopify desde la IP antigua; Kommo y el
+              plugin WP se actualizan a mano.
+            </p>
+            {publicBase ? (
+              <p className="mt-2 text-sm text-green-900">
+                Base actual: <span className="font-medium">{publicBase}</span>
+              </p>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            disabled={syncInbound.isPending}
+            onClick={() => syncInbound.mutate()}
+          >
+            {syncInbound.isPending ? "Sincronizando…" : "Sincronizar webhooks"}
+          </Button>
+        </div>
+
+        {webhookUrls.length ? (
+          <div className="space-y-2">
+            {webhookUrls.map((w) => (
+              <div
+                key={`${w.provider}-${w.topic}`}
+                className="rounded-[16px] border border-line bg-warm-white px-4 py-3"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="dark">{w.provider}</Badge>
+                  <span className="text-xs label-caps text-text-soft">{w.topic}</span>
+                </div>
+                <p className="mt-1 break-all text-sm text-green-900">{w.url}</p>
+                <p className="mt-1 text-xs text-text-soft">{w.where}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {syncResult?.manual?.length ? (
+          <div className="mt-4 space-y-2">
+            <p className="text-sm font-medium text-green-900">Pasos manuales</p>
+            {syncResult.manual.map((m) => (
+              <div key={m.provider} className="text-sm text-text-muted">
+                <span className="text-green-900">{m.provider}:</span> {m.action}
+                {m.url ? (
+                  <>
+                    {" "}
+                    → <span className="break-all text-green-900">{m.url}</span>
+                  </>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </Card>
 
       <div className="space-y-6">
         {GROUP_ORDER.filter((g) => byGroup[g]).map((group) => {

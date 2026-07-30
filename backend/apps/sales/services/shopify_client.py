@@ -283,3 +283,152 @@ def iter_orders_in_range(
         pages += 1
         if not page_info:
             break
+
+
+# Topics Seeds consumes on a single HTTPS endpoint.
+SHOPIFY_WEBHOOK_TOPICS = (
+    "ORDERS_CREATE",
+    "ORDERS_UPDATED",
+    "ORDERS_PAID",
+    "ORDERS_CANCELLED",
+)
+
+
+def ensure_shopify_webhooks(*, callback_url: str | None = None) -> dict[str, Any]:
+    """
+    Create missing Shopify HTTPS webhook subscriptions (GraphQL Admin API).
+    Idempotent: skips topics already pointing at the same callback URL.
+    """
+    from apps.config.public_urls import public_base_url
+
+    domain, token, version = _shopify_creds()
+    if not domain or not token:
+        return {
+            "ok": False,
+            "message": "Shopify no configurado (credenciales).",
+            "created": [],
+            "existing": [],
+            "errors": [],
+        }
+
+    callback = (callback_url or f"{public_base_url()}/api/v1/webhooks/shopify/orders/").strip()
+    gql_url = f"https://{domain}/admin/api/{version}/graphql.json"
+    headers = {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json",
+    }
+
+    list_query = """
+    {
+      webhookSubscriptions(first: 50) {
+        edges {
+          node {
+            id
+            topic
+            endpoint {
+              __typename
+              ... on WebhookHttpEndpoint { callbackUrl }
+            }
+          }
+        }
+      }
+    }
+    """
+    create_mutation = """
+    mutation webhookSubscriptionCreate(
+      $topic: WebhookSubscriptionTopic!
+      $webhookSubscription: WebhookSubscriptionInput!
+    ) {
+      webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
+        webhookSubscription { id topic }
+        userErrors { field message }
+      }
+    }
+    """
+
+    created: list[str] = []
+    existing: list[str] = []
+    errors: list[str] = []
+
+    try:
+        with httpx.Client(timeout=45.0) as client:
+            listed = client.post(gql_url, headers=headers, json={"query": list_query})
+            listed.raise_for_status()
+            edges = (
+                ((listed.json() or {}).get("data") or {})
+                .get("webhookSubscriptions", {})
+                .get("edges")
+                or []
+            )
+            by_topic: dict[str, str] = {}
+            for edge in edges:
+                node = (edge or {}).get("node") or {}
+                topic = str(node.get("topic") or "")
+                endpoint = node.get("endpoint") or {}
+                url = str(endpoint.get("callbackUrl") or "")
+                if topic and url:
+                    by_topic[topic] = url
+
+            for topic in SHOPIFY_WEBHOOK_TOPICS:
+                current = by_topic.get(topic) or by_topic.get(topic.replace("_", "/"))
+                # GraphQL enum ORDERS_CREATE vs REST orders/create — normalize compare
+                matched = None
+                for k, url in by_topic.items():
+                    if k.replace("/", "_").upper() == topic or k.upper() == topic:
+                        matched = url
+                        break
+                if matched and matched.rstrip("/") == callback.rstrip("/"):
+                    existing.append(topic)
+                    continue
+                if matched and matched.rstrip("/") != callback.rstrip("/"):
+                    # Leave existing (may be another env); create would duplicate.
+                    errors.append(
+                        f"{topic}: ya existe otra URL ({matched}). Actualízala manualmente a {callback}"
+                    )
+                    continue
+
+                payload = {
+                    "query": create_mutation,
+                    "variables": {
+                        "topic": topic,
+                        "webhookSubscription": {
+                            "callbackUrl": callback,
+                            "format": "JSON",
+                        },
+                    },
+                }
+                res = client.post(gql_url, headers=headers, json=payload)
+                body = res.json() or {}
+                data = (body.get("data") or {}).get("webhookSubscriptionCreate") or {}
+                user_errors = data.get("userErrors") or []
+                if res.status_code >= 300 or user_errors:
+                    msg = user_errors[0].get("message") if user_errors else res.text[:200]
+                    errors.append(f"{topic}: {msg}")
+                    continue
+                created.append(topic)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "message": f"Error registrando webhooks Shopify: {exc}",
+            "callback_url": callback,
+            "created": created,
+            "existing": existing,
+            "errors": errors + [str(exc)],
+        }
+
+    ok = not errors or (created or existing)
+    parts = []
+    if created:
+        parts.append(f"creados {len(created)}")
+    if existing:
+        parts.append(f"ya ok {len(existing)}")
+    if errors:
+        parts.append(f"avisos {len(errors)}")
+    return {
+        "ok": ok and not any("Error" in e for e in errors),
+        "message": "Shopify webhooks: " + (", ".join(parts) if parts else "sin cambios"),
+        "callback_url": callback,
+        "created": created,
+        "existing": existing,
+        "errors": errors,
+    }

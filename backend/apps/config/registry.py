@@ -401,6 +401,17 @@ SETTINGS: list[Setting] = [
     ),
     # Business
     Setting(
+        key="business.public_base_url",
+        label="URL pública del ERP",
+        group="BUSINESS",
+        type=SettingType.STRING,
+        default="https://erp.seedscol.com",
+        help=(
+            "Base HTTPS usada por webhooks (Woo/Shopify/Kommo) y el plugin WP. "
+            "Sin slash final. Ejemplo: https://erp.seedscol.com"
+        ),
+    ),
+    Setting(
         key="business.iva_rate",
         label="IVA (%)",
         group="BUSINESS",

@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 
 from apps.config import settings_service as cfg
 from apps.config.models import SettingAudit
+from apps.config.public_urls import public_base_url, webhook_catalog
 from apps.config.registry import GROUPS
 from apps.config.serializers import SettingPatchSerializer
 from apps.users.permissions import IsModuleRole
@@ -25,6 +26,8 @@ class ConfigListView(APIView):
             {
                 "groups": GROUPS,
                 "settings": cfg.list_group(),
+                "public_base_url": public_base_url(),
+                "webhook_urls": webhook_catalog(),
             }
         )
 
@@ -119,6 +122,67 @@ class ConfigTestView(APIView):
             {
                 "ok": True,
                 "message": f"Grupo {group}: configuración presente (sin ping específico).",
+            }
+        )
+
+
+class SyncInboundUrlsView(APIView):
+    """
+    Migrate inbound webhook URLs from Elastic IP → public HTTPS domain.
+    - Shopify: create HTTPS subscriptions
+    - WooCommerce: rewrite delivery_url via WC REST API
+    Alegra/Envia are outbound-only (no change).
+    Kommo must be updated in Digital Pipeline (manual URL in response).
+    """
+
+    permission_module = "settings"
+    permission_crud = "u"
+    permission_classes = [IsModuleRole]
+
+    def post(self, request):
+        from apps.sales.services.shopify_client import ensure_shopify_webhooks
+        from apps.sales.services.woo_client import migrate_woocommerce_webhooks
+
+        base = public_base_url()
+        shopify = ensure_shopify_webhooks()
+        woo = migrate_woocommerce_webhooks(new_base=base)
+        catalog = webhook_catalog(base)
+        kommo = next((c for c in catalog if c["provider"] == "KOMMO"), None)
+        manual = [
+            {
+                "provider": "KOMMO",
+                "action": "Actualizar URL en Kommo Digital Pipeline",
+                "url": (kommo or {}).get("url") or f"{base}/webhook/seeds-erp/",
+            },
+            {
+                "provider": "WORDPRESS_PLUGIN",
+                "action": "WooCommerce → Seeds ERP → URL del ERP",
+                "url": base,
+            },
+            {
+                "provider": "ALEGRA",
+                "action": "Sin cambio (Seeds llama a Alegra; no hay webhook entrante)",
+                "url": "",
+            },
+            {
+                "provider": "ENVIA",
+                "action": "Sin cambio (Seeds llama a Envia; no hay webhook entrante)",
+                "url": "",
+            },
+        ]
+        ok = bool(shopify.get("ok")) and bool(woo.get("ok"))
+        return Response(
+            {
+                "ok": ok,
+                "public_base_url": base,
+                "message": (
+                    f"Base {base}. Shopify: {shopify.get('message')} · "
+                    f"Woo: {woo.get('message')}"
+                ),
+                "shopify": shopify,
+                "woocommerce": woo,
+                "manual": manual,
+                "webhook_urls": catalog,
             }
         )
 

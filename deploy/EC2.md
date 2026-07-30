@@ -18,17 +18,18 @@ Internet → :80/:443 (nginx)
               └─ redis
 ```
 
-Webhooks Kommo/Woo apuntan a:
+Webhooks (dominio HTTPS):
 
 ```text
-http://52.5.54.227/webhook/947e33e3-6541-42f7-bb11-3c1147808b91
+https://erp.seedscol.com/webhook/seeds-erp/
 (Kommo Digital Pipeline only accepts `/webhook/<id>` URLs; the old `/api/v1/webhooks/...` path is also kept for internal/API use.)
-http://52.5.54.227/api/v1/webhooks/woocommerce/order-created/
+https://erp.seedscol.com/api/v1/webhooks/woocommerce/order-created/
+https://erp.seedscol.com/api/v1/webhooks/woocommerce/order-updated/
+https://erp.seedscol.com/api/v1/webhooks/shopify/orders/
 ```
 
-(Con dominio + HTTPS, cambia a `https://TU_DOMINIO/...`.)
-
-**Elastic IP actual:** `52.5.54.227`
+IP de bootstrap (sigue respondiendo en HTTP): `52.5.54.227`  
+**Dominio público:** `https://erp.seedscol.com`
 
 ---
 
@@ -163,9 +164,11 @@ Entonces el compose solo escucha 80 y `X-Forwarded-Proto` ya viene `https`.
 ## 7. Post-deploy (panel ERP)
 
 1. Cambiar password del admin.  
-2. **Configuración** → tokens Envia, Alegra, Woo, Kommo → Probar conexión.  
-3. Pegar URLs de webhooks en Woo/Kommo con el dominio HTTPS.  
-4. Opcional: `SEEDS_BOOTSTRAP_SEEDS=0` en redeploys para no re-sembrar datos demo.
+2. **Configuración** → tokens Envia, Alegra, Woo, Shopify, Kommo → Probar conexión.  
+3. En Configuración → **Sincronizar webhooks** (migra Woo/Shopify a `https://erp.seedscol.com`).  
+4. Actualizar a mano Kommo Digital Pipeline y el plugin WP (`URL del ERP`).  
+5. Alegra/Envia: sin cambio (solo salientes).  
+6. Opcional: `SEEDS_BOOTSTRAP_SEEDS=0` en redeploys para no re-sembrar datos demo.
 
 ---
 
