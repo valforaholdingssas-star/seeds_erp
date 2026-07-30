@@ -204,3 +204,42 @@ def test_shopify_resync_empty_without_creds(api, admin_user):
     assert res.data["total"] == 0
     assert res.data["job_type"] == BatchJobType.SHOPIFY_RESYNC
     assert BatchJob.objects.filter(job_type=BatchJobType.SHOPIFY_RESYNC).exists()
+
+
+@pytest.mark.django_db
+def test_client_credentials_token_exchange(monkeypatch):
+    from apps.sales.services import shopify_client as sc
+
+    monkeypatch.setattr(sc, "_shop_domain", lambda: "vtup15-zx.myshopify.com")
+    monkeypatch.setattr(sc, "_client_id", lambda: "client-id-test")
+    monkeypatch.setattr(sc, "_client_secret", lambda: "client-secret-test")
+    monkeypatch.setattr(sc, "_legacy_static_token", lambda: "")
+    sc.cache.delete(sc._TOKEN_CACHE_KEY)
+
+    class FakeResp:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {"access_token": "tok_from_oauth", "expires_in": 86399}
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, url, data=None, headers=None):
+            assert "access_token" in url
+            assert data["grant_type"] == "client_credentials"
+            assert data["client_id"] == "client-id-test"
+            return FakeResp()
+
+    monkeypatch.setattr(sc.httpx, "Client", FakeClient)
+    assert sc.get_admin_access_token(force_refresh=True) == "tok_from_oauth"
+    # Second call should hit cache (no post)
+    assert sc.get_admin_access_token() == "tok_from_oauth"

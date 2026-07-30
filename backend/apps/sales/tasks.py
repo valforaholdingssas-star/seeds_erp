@@ -61,11 +61,15 @@ def verify_woo_signature(raw_body: bytes, signature: str) -> bool:
 
 def verify_shopify_signature(raw_body: bytes, signature: str) -> bool:
     """
-    Shopify HMAC: base64(HMAC-SHA256(raw_body, api_secret)).
+    Shopify HMAC: base64(HMAC-SHA256(raw_body, client_secret|api_secret)).
     Header: X-Shopify-Hmac-SHA256
     Docs: https://shopify.dev/docs/apps/build/webhooks/subscribe/https
     """
-    secret = cfg.get_secret("shopify.api_secret") or ""
+    secret = (
+        cfg.get_secret("shopify.api_secret")
+        or cfg.get_secret("shopify.client_secret")
+        or ""
+    )
     if not secret:
         return not cfg.get_bool("shopify.require_signature", True)
     digest = base64.b64encode(

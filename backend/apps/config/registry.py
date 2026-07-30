@@ -263,24 +263,45 @@ SETTINGS: list[Setting] = [
         label="Dominio de la tienda",
         group="SHOPIFY",
         type=SettingType.STRING,
-        help="Ej. seeds-store.myshopify.com (sin https://).",
+        help="Ej. vtup15-zx.myshopify.com (sin https://). No uses seedscol.com.",
     ),
     Setting(
-        key="shopify.admin_access_token",
-        label="Admin API access token",
+        key="shopify.client_id",
+        label="Client ID",
         group="SHOPIFY",
-        type=SettingType.SECRET,
-        help="Token de la app custom (shpat_…). Necesario para resync/ping.",
+        type=SettingType.STRING,
+        help="Dev Dashboard → Configuración → Credenciales. App moderna (sin shpat_).",
     ),
     Setting(
-        key="shopify.api_secret",
-        label="API secret / webhook HMAC",
+        key="shopify.client_secret",
+        label="Client secret",
         group="SHOPIFY",
         type=SettingType.SECRET,
         help=(
-            "Client secret de la app. Firma X-Shopify-Hmac-SHA256 (base64). "
-            "Webhook HTTPS: /api/v1/webhooks/shopify/orders/ "
-            "(topics: orders/create, orders/updated, orders/paid, orders/cancelled)."
+            "Dev Dashboard → Credenciales → Secret. "
+            "Se usa para pedir access token (client_credentials) y como HMAC de webhooks."
+        ),
+    ),
+    Setting(
+        key="shopify.admin_access_token",
+        label="Admin API access token (legacy)",
+        group="SHOPIFY",
+        type=SettingType.SECRET,
+        help=(
+            "Opcional. Solo apps custom antiguas con token fijo shpat_…. "
+            "Si hay Client ID + Secret, déjalo vacío."
+        ),
+    ),
+    Setting(
+        key="shopify.api_secret",
+        label="Webhook HMAC secret (opcional)",
+        group="SHOPIFY",
+        type=SettingType.SECRET,
+        help=(
+            "Opcional si ya pegaste Client secret arriba (se reutiliza). "
+            "Firma X-Shopify-Hmac-SHA256. Webhook HTTPS: "
+            "/api/v1/webhooks/shopify/orders/ "
+            "(orders/create, orders/updated, orders/paid, orders/cancelled)."
         ),
     ),
     Setting(
